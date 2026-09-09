@@ -1,0 +1,774 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BuffMechanics | Elite Training Suite</title>
+    <meta name="description" content="Open training platform for competitive gamers. Science-based mechanical and cognitive skill modules.">
+
+    <!-- Open Graph -->
+    <meta property="og:title" content="BuffMechanics · Elite Training Suite">
+    <meta property="og:description" content="Free training modules for aim, reaction time, attention, and more.">
+    <meta property="og:type" content="website">
+
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' fill='%23060608'/%3E%3Ctext x='50%25' y='54%25' text-anchor='middle' dominant-baseline='middle' font-family='monospace' font-size='40' font-weight='700' fill='%23e8e8ec'%3EB%3C/text%3E%3Crect x='2' y='2' width='60' height='60' fill='none' stroke='%23e8e8ec' stroke-width='3'/%3E%3C/svg%3E">
+    <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=Space+Mono:wght@400;700&family=Inter:wght@500;700;800&family=Cormorant+Garamond:wght@500;700&family=Press+Start+2P&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="assets/shared.css">
+    <style>
+        /* Index-specific */
+        body{padding:40px 24px 100px;min-height:100vh}
+
+        /* Header */
+        header{display:flex;align-items:center;gap:16px;margin-bottom:56px;max-width:1080px;margin-left:auto;margin-right:auto}
+        .logo-box{
+            width:44px;height:44px;border:2px solid var(--t1);
+            display:flex;align-items:center;justify-content:center;
+            font-size:22px;font-weight:700;color:var(--t1);flex-shrink:0;
+            cursor:pointer;position:relative;
+            transition:border-color .2s;
+            user-select:none;
+        }
+        .logo-box:hover{border-color:var(--mech)}
+
+        /* Hover glitch: two stacked clones of "B" with chromatic offsets,
+           hidden by default. On hover, they appear and jitter slightly. */
+        .bm-logo-glitch{
+            position:absolute;top:0;left:0;width:100%;height:100%;
+            display:flex;align-items:center;justify-content:center;
+            font-size:22px;font-weight:700;
+            pointer-events:none;
+            opacity:0;
+            transition:opacity .15s;
+            mix-blend-mode:screen;
+        }
+        .logo-box:hover .bm-logo-glitch{
+            opacity:.9;
+            animation:bm-glitch-jitter .25s steps(4, end) infinite;
+        }
+        .bm-logo-glitch:not(.g2){color:#00e8ff;transform:translate(-2px, 0)}
+        .bm-logo-glitch.g2     {color:#ff3a8c;transform:translate(2px, 0)}
+        @keyframes bm-glitch-jitter{
+            0%   {transform:translate(-2px, 0)}
+            25%  {transform:translate(-3px, 1px)}
+            50%  {transform:translate(-1px, -1px)}
+            75%  {transform:translate(-2px, 0)}
+            100% {transform:translate(-2px, 0)}
+        }
+        .bm-logo-glitch.g2{animation-delay:.07s}
+        .logo-box:hover .bm-logo-glitch.g2{
+            animation:bm-glitch-jitter-2 .22s steps(4, end) infinite;
+        }
+        @keyframes bm-glitch-jitter-2{
+            0%   {transform:translate(2px, 0)}
+            25%  {transform:translate(3px, -1px)}
+            50%  {transform:translate(1px, 1px)}
+            75%  {transform:translate(2px, 0)}
+            100% {transform:translate(2px, 0)}
+        }
+        /* Scanline overlay during hover — single very-thin moving line */
+        .logo-box::after{
+            content:'';position:absolute;left:0;right:0;
+            height:1px;background:rgba(0,232,255,.6);
+            top:0;
+            opacity:0;pointer-events:none;
+        }
+        .logo-box:hover::after{
+            opacity:.5;
+            animation:bm-scanline 1.4s linear infinite;
+        }
+        @keyframes bm-scanline{
+            0%{top:0}
+            100%{top:100%}
+        }
+
+        /* ── Stats modal (BM diagnostic) ── */
+        /* ═══════════════════════════════════════════════════════════
+           PLAYER CARD — opens from the B logo.
+           A dossier-style card the player customizes and exports as PNG.
+           CSS uses theme variables (--pc-*) so the rendered card can be
+           re-themed live without rebuilding the DOM.
+           ═══════════════════════════════════════════════════════════ */
+        .logo-text{font-size:28px;font-weight:700;letter-spacing:.25em;color:var(--t1)}
+        .logo-text span{color:var(--t3)}
+        .logo-sub{font-family:'Space Mono',monospace;font-size:9px;color:var(--t2);letter-spacing:.4em;text-transform:uppercase;margin-top:2px}
+        .hline{flex:1;height:1px;background:var(--bd);margin:0 24px}
+
+        main{max-width:1080px;margin:0 auto}
+
+        /* Section titles */
+        .sec-title{display:flex;align-items:center;gap:16px;margin-bottom:24px}
+        .sec-tag{font-family:'Space Mono',monospace;font-size:8px;font-weight:700;letter-spacing:.15em;text-transform:uppercase;padding:4px 10px;border:1px solid}
+        .sec-name{font-size:17px;font-weight:700;letter-spacing:.2em;color:var(--t2);text-transform:uppercase}
+        .sec-line{flex:1;height:1px;background:linear-gradient(90deg,var(--bd),transparent)}
+
+        .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:20px;margin-bottom:56px}
+
+        /* Cards */
+        .card{background:var(--sf);border:1px solid var(--bd);cursor:pointer;transition:all .3s cubic-bezier(.165,.84,.44,1);position:relative;overflow:hidden}
+        .card:hover{background:var(--sf2);border-color:var(--card-accent);transform:translateY(-4px) scale(1.025);box-shadow:0 10px 28px rgba(0,0,0,.5)}
+        .card::before{content:'';position:absolute;left:0;top:0;bottom:0;width:2px;background:var(--card-accent);opacity:.2;transition:opacity .3s}
+        .card:hover::before{opacity:1}
+
+        .card-head{padding:20px 22px 0;display:flex;justify-content:space-between;align-items:flex-start}
+        .card-code{font-family:'Space Mono',monospace;font-size:10px;font-weight:700;letter-spacing:.12em;color:var(--t2);transition:color .3s}
+        .card:hover .card-code{color:var(--t1)}
+        .card-icon{font-size:26px;color:var(--card-accent);opacity:.7;transition:all .3s}
+        .card:hover .card-icon{opacity:1;transform:scale(1.15)}
+
+        .card-body{padding:14px 22px 20px}
+        .card-title{font-size:22px;font-weight:700;color:var(--t1);letter-spacing:.03em;margin-bottom:8px;line-height:1.2}
+        .card-desc{font-family:'Rajdhani',sans-serif;font-size:14px;font-weight:500;color:var(--t2-5);line-height:1.55;min-height:42px;transition:color .3s}
+        .card:hover .card-desc{color:var(--t1)}
+        /* ── Record chip: the module's best metric as a glowing stat plate ── */
+        .card-best{margin-top:14px;min-height:32px;display:flex}
+        .best-chip{
+            position:relative;overflow:hidden;
+            display:inline-flex;align-items:center;gap:9px;
+            padding:6px 12px;
+            background:rgba(255,255,255,.02);
+            border:1px solid var(--bd);
+            border-left:2px solid var(--card-accent);
+            transition:border-color .3s,background .3s,box-shadow .3s,transform .3s;
+        }
+        .best-chip-mark{font-size:9px;color:var(--card-accent);opacity:.6;line-height:1;transition:transform .3s,opacity .3s}
+        .best-chip-label{font-family:'Space Mono',monospace;font-size:8.5px;font-weight:700;letter-spacing:.14em;color:var(--t2);text-transform:uppercase;line-height:1}
+        .best-chip-value{font-family:'Rajdhani',sans-serif;font-size:18px;font-weight:700;color:var(--t1);line-height:1;letter-spacing:.02em;transition:color .3s}
+        .best-chip-value small{font-family:'Space Mono',monospace;font-size:9px;font-weight:400;color:var(--t2);margin-left:3px;letter-spacing:.05em}
+        /* shine sweep across the chip on card hover */
+        .best-chip::after{content:'';position:absolute;top:0;left:-90%;width:55%;height:100%;
+            background:linear-gradient(105deg,transparent,rgba(255,255,255,.09),transparent);transform:skewX(-18deg)}
+        .card:hover .best-chip:not(.ghost)::after{animation:chipShine .65s ease .05s}
+        @keyframes chipShine{to{left:140%}}
+        /* hover: the chip lights up in the module's color */
+        .card:hover .best-chip:not(.ghost){
+            border-color:var(--card-accent);
+            background:rgba(255,255,255,.03);
+            box-shadow:0 0 16px -6px var(--card-accent);
+            transform:translateX(2px);
+        }
+        .card:hover .best-chip:not(.ghost) .best-chip-value{color:var(--card-accent)}
+        .card:hover .best-chip:not(.ghost) .best-chip-mark{opacity:1;transform:translateY(-2px)}
+        /* ghost state: no record yet — a quiet dashed invitation */
+        .best-chip.ghost{border:1px dashed var(--bd);opacity:.5;background:transparent;padding:6px 12px}
+        .card:hover .best-chip.ghost{opacity:.85;border-color:var(--t3)}
+
+        .card-foot{padding:13px 22px;background:rgba(0,0,0,.2);border-top:1px solid var(--bd);display:flex;justify-content:space-between;align-items:center}
+        .card-tag{font-family:'Space Mono',monospace;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.12em;color:var(--t2)}
+        .card:hover .card-tag{color:var(--card-accent)}
+        .card-launch{font-size:12px;font-weight:700;letter-spacing:.14em;color:var(--t1);opacity:0;transform:translateX(8px);transition:all .3s}
+        .card:hover .card-launch{opacity:1;transform:translateX(0)}
+
+        /* Header sound toggle (uses shared .snd-toggle but positioned in header context) */
+        .header-snd{margin-left:auto;background:none;border:1px solid var(--bd);color:var(--t2);font-family:'Space Mono',monospace;font-size:9px;padding:5px 12px;cursor:pointer;letter-spacing:.1em;transition:all .2s}
+        .header-snd:hover{color:var(--t1);border-color:var(--t2)}
+
+        /* Header view toggle (segmented) */
+        .header-actions{display:flex;align-items:center;gap:8px;margin-left:auto}
+        .header-action{min-height:40px;display:inline-flex;align-items:center;justify-content:center;gap:7px;padding:0 12px;border:1px solid var(--bd);background:var(--sf);color:var(--t2);font-family:'Space Mono',monospace;font-size:10px;font-weight:700;letter-spacing:.08em;text-decoration:none;transition:color .2s,border-color .2s,background .2s,transform .2s}
+        .header-action:hover{color:var(--t1);border-color:var(--t2);background:#17171e;transform:translateY(-1px)}
+        .header-routine{border-bottom:2px solid var(--miss);padding-bottom:1px;color:var(--t1)}
+        .header-routine strong{font:700 25px/1 'Rajdhani',sans-serif;letter-spacing:0}
+        .header-routine span{font-size:11px;color:var(--t2);letter-spacing:0}
+        .view-toggle{display:inline-flex;border:1px solid var(--bd)}
+        .vt-btn{background:none;border:none;color:var(--t3);padding:6px 11px;cursor:pointer;font-size:13px;line-height:1;transition:all .2s;font-family:inherit}
+        .vt-btn:hover{color:var(--t1);background:var(--sf)}
+        .vt-btn.on{color:var(--t1);background:var(--sf);border-bottom:2px solid var(--t1);padding-bottom:4px}
+
+        /* Header settings gear */
+        .gear-btn{margin-left:0;background:none;border:1px solid var(--bd);color:var(--t2);width:30px;height:30px;cursor:pointer;font-size:15px;line-height:1;transition:all .2s;display:flex;align-items:center;justify-content:center;padding:0}
+        .gear-btn:hover{color:var(--t1);border-color:var(--t2);transform:rotate(45deg)}
+
+        /* Audio-ready hint badge — shown until user makes a valid gesture.
+           Hover events don't count as gestures for AudioContext, so we
+           politely tell the user to click anywhere once. Disappears the
+           moment audio becomes available. */
+        .audio-hint{
+            position:fixed;bottom:20px;left:50%;transform:translateX(-50%) translateY(10px);
+            display:flex;align-items:center;gap:8px;
+            padding:8px 16px;
+            background:var(--sf2);border:1px solid var(--bd);
+            font-family:'Space Mono',monospace;font-size:10px;
+            color:var(--t2);letter-spacing:.12em;text-transform:uppercase;
+            z-index:99;
+            opacity:0;pointer-events:none;
+            transition:opacity .3s, transform .3s;
+        }
+        .audio-hint.on{opacity:1;transform:translateX(-50%) translateY(0)}
+        .audio-hint .pulse-dot{
+            width:6px;height:6px;border-radius:50%;background:var(--accent);
+            box-shadow:0 0 6px var(--accent);
+            animation:bm-pulse 1.4s infinite;
+        }
+
+        /* ── ICON MODE ───────────────────────────────────
+           Same HTML, compact layout: icon centered + title.
+           Hides description, foot, best score. */
+        body.view-icons .grid{
+            grid-template-columns:repeat(auto-fill,minmax(175px,1fr));
+            gap:14px;margin-bottom:48px;
+        }
+        body.view-icons .card{position:relative}
+        body.view-icons .card-head{padding:20px 12px 0;justify-content:center}
+        body.view-icons .card-code{position:absolute;top:10px;left:12px;font-size:9px}
+        body.view-icons .card-icon{font-size:40px;margin:6px 0 0}
+        body.view-icons .card-body{padding:10px 10px 20px;text-align:center}
+        body.view-icons .card-title{font-size:15px;letter-spacing:.06em;margin-bottom:0;line-height:1.25}
+        body.view-icons .card-desc,
+        body.view-icons .card-best,
+        body.view-icons .card-foot{display:none}
+        body.view-icons .card:hover{transform:translateY(-3px) scale(1.04);box-shadow:0 6px 18px rgba(0,0,0,.45)}
+        body.view-icons .card:hover .card-icon{transform:scale(1.2)}
+
+        /* ── SETTINGS OVERLAY ──────────────────────────────
+           Same visual language as the support overlay. */
+        .set-overlay{position:fixed;inset:0;background:rgba(6,6,8,0);z-index:300;display:flex;align-items:center;justify-content:center;pointer-events:none;transition:background .3s;overflow-y:auto;padding:24px}
+        .set-overlay.on{background:rgba(6,6,8,.92);pointer-events:all;backdrop-filter:blur(8px)}
+        .set-panel{background:var(--sf);border:1px solid var(--bd);padding:32px;width:100%;max-width:460px;position:relative;opacity:0;transform:translateY(20px) scale(.97);transition:all .35s cubic-bezier(.16,1,.3,1)}
+        .set-overlay.on .set-panel{opacity:1;transform:translateY(0) scale(1)}
+        .set-close{position:absolute;top:12px;right:14px;background:none;border:none;color:var(--t3);font-size:16px;cursor:pointer;padding:4px 8px;transition:all .2s;font-family:'Space Mono',monospace}
+        .set-close:hover{color:var(--t1);transform:scale(1.15)}
+        .set-row{display:flex;align-items:center;justify-content:space-between;padding:14px 0;border-bottom:1px solid var(--bd);gap:16px}
+        .set-row:last-of-type{border-bottom:none}
+        .set-label{font-size:14px;font-weight:700;letter-spacing:.04em;color:var(--t1)}
+        .set-hint{font-family:'Space Mono',monospace;font-size:9px;color:var(--t3);letter-spacing:.08em;margin-top:3px}
+        .set-toggle{background:var(--bg);border:1px solid var(--bd);color:var(--t2);font-family:'Space Mono',monospace;font-size:10px;padding:6px 18px;cursor:pointer;letter-spacing:.12em;transition:all .15s;min-width:64px}
+        .set-toggle.on{color:var(--hit);border-color:var(--hit);background:rgba(0,255,136,.06)}
+        .set-toggle:hover{border-color:var(--t2);color:var(--t1)}
+        .set-toggle.on:hover{color:var(--hit);border-color:var(--hit)}
+        .set-vol-wrap{display:flex;align-items:center;gap:10px;flex:1;max-width:200px}
+        .set-vol-wrap input[type=range]{flex:1}
+        .set-vol-v{font-family:'Space Mono',monospace;font-size:11px;color:var(--t2);min-width:34px;text-align:right}
+        .set-mouse-wrap{display:grid;grid-template-columns:minmax(0,1fr) 76px;gap:8px;align-items:center;flex:1;max-width:200px}
+        .set-mouse-wrap input[type=number],.set-select{width:100%;box-sizing:border-box;background:var(--bg);border:1px solid var(--bd);color:var(--t1);font:700 11px 'Space Mono',monospace;padding:8px;outline:none}
+        .set-mouse-wrap input[type=number]{text-align:center;color:var(--cog)}
+        .set-mouse-wrap input:focus,.set-select:focus{border-color:var(--cog)}
+        @media(max-width:650px){.header-actions{gap:5px}.header-action{min-height:36px;padding:0 9px}.header-progress-text{display:none}.bm-home header{padding-left:0}.bm-home .gear-btn{margin-left:0}}
+
+        .set-lang{display:flex;align-items:center;gap:4px;border:1px solid var(--bd);padding:3px}
+        .set-lang-btn{background:none;border:none;font-family:'Space Mono',monospace;font-size:11px;font-weight:700;letter-spacing:.08em;color:var(--t3);padding:5px 12px;cursor:pointer;transition:all .2s}
+        .set-lang-btn:hover{color:var(--t1)}
+        .set-lang-btn.on{background:var(--cog);color:#04101f}
+
+    </style>
+<link rel="stylesheet" href="assets/player-card.css">
+<link rel="stylesheet" href="assets/experience.css">
+<link rel="stylesheet" href="assets/workspace.css">
+</head>
+<body class="bm-home">
+
+<header>
+    <div class="logo-box" id="bm-logo" aria-label="Buffmechanics">B<span class="bm-logo-glitch" aria-hidden="true">B</span><span class="bm-logo-glitch g2" aria-hidden="true">B</span></div>
+    <div>
+        <div class="logo-text">BUFF<span>MECHANICS</span></div>
+        <div class="logo-sub" data-i18n="home.tagline">Improve your skills</div>
+    </div>
+    <div class="hline"></div>
+    <div class="header-actions" aria-label="Navegación principal">
+        <a class="header-action header-routine" href="routine.html" title="Entrenamiento personalizado de 5 minutos"><strong>5</strong><span>m</span></a>
+        <a class="header-action header-progress" href="progress.html" title="Mi progreso"><span class="header-progress-text" data-i18n="nav.progress">Mi progreso</span></a>
+        <div class="view-toggle" title="View mode">
+            <button class="vt-btn on" data-view="cards" title="Cards view">▦</button>
+            <button class="vt-btn" data-view="icons" title="Icons view">⊞</button>
+        </div>
+        <button class="gear-btn" id="gear-btn" onclick="toggleSettings(true)" title="Settings">⚙</button>
+    </div>
+</header>
+
+<main>
+    <!-- MECHANICAL -->
+    <section>
+        <div class="sec-title">
+            <div class="sec-tag" style="color:var(--mech);border-color:var(--mech)">MECH</div>
+            <div class="sec-name" data-i18n="home.sec.mech.name">Hardware Mechanics</div>
+            <div class="sec-line"></div>
+        </div>
+        <div class="grid" id="grid-mech">
+
+            <div class="card" data-module="aim" data-tone="622" data-url="modulos/aim_v2.html" style="--card-accent:var(--mech)">
+                <div class="card-head"><span class="card-code">M-01</span><span class="card-icon">◎</span></div>
+                <div class="card-body">
+                    <div class="card-title" data-i18n="card.aim.title">Aim Protocol</div>
+                    <div class="card-desc" data-i18n="card.aim.desc">Precision flicking and muscle memory micro-adjustments.</div>
+                    <div class="card-best" data-best-for="aim" data-best-prefix="hps_" data-best-key="idx.best.hps" data-best-suffix="/s" data-best-decimals="1"></div>
+                </div>
+                <div class="card-foot"><span class="card-tag" data-i18n="card.aim.tag">High Intensity</span><span class="card-launch">LAUNCH →</span></div>
+            </div>
+
+            <div class="card" data-module="time" data-tone="554" data-url="modulos/time_v3.html" style="--card-accent:#f97316">
+                <div class="card-head"><span class="card-code">M-02</span><span class="card-icon">⚡</span></div>
+                <div class="card-body">
+                    <div class="card-title" data-i18n="card.time.title">Reaction Time</div>
+                    <div class="card-desc" data-i18n="card.time.desc">Visual-motor latency. Instant reflex training.</div>
+                    <div class="card-best" data-best-for="time" data-best-metric="avgMs" data-best-key="idx.best.avg" data-best-suffix=" ms" data-best-lower></div>
+                </div>
+                <div class="card-foot"><span class="card-tag" data-i18n="card.time.tag">Pure Speed</span><span class="card-launch">LAUNCH →</span></div>
+            </div>
+
+            <div class="card" data-module="tracking" data-tone="494" data-url="modulos/tracking_v2.html" style="--card-accent:#f97316">
+                <div class="card-head"><span class="card-code">M-03</span><span class="card-icon">◉</span></div>
+                <div class="card-body">
+                    <div class="card-title" data-i18n="card.tracking.title">Smooth Tracking</div>
+                    <div class="card-desc" data-i18n="card.tracking.desc">Sustained target acquisition on fluid trajectories.</div>
+                    <div class="card-best" data-best-for="tracking" data-best-prefix="lock_" data-best-key="idx.best.lock" data-best-suffix="%" data-best-decimals="1"></div>
+                </div>
+                <div class="card-foot"><span class="card-tag" data-i18n="card.tracking.tag">Consistency</span><span class="card-launch">LAUNCH →</span></div>
+            </div>
+
+            <div class="card" data-module="clicktime" data-tone="466" data-url="modulos/clicktime_v2.html" style="--card-accent:#f59e0b">
+                <div class="card-head"><span class="card-code">M-04</span><span class="card-icon">⊕</span></div>
+                <div class="card-body">
+                    <div class="card-title" data-i18n="card.clicktime.title">Click Timing</div>
+                    <div class="card-desc" data-i18n="card.clicktime.desc">Fire synchronization at peak trajectory moments.</div>
+                    <div class="card-best" data-best-for="clicktime" data-best-prefix="perfrate_" data-best-key="idx.best.perfect" data-best-suffix="%"></div>
+                </div>
+                <div class="card-foot"><span class="card-tag" data-i18n="card.clicktime.tag">Temporal Precision</span><span class="card-launch">LAUNCH →</span></div>
+            </div>
+
+            <div class="card" data-module="flicking" data-tone="415" data-url="modulos/flicking_v2.html" style="--card-accent:var(--mech)">
+                <div class="card-head"><span class="card-code">M-05</span><span class="card-icon">✋</span></div>
+                <div class="card-body">
+                    <div class="card-title" data-i18n="card.flicking.title">Anti-Flick Stability</div>
+                    <div class="card-desc" data-i18n="card.flicking.desc">Deceleration training. Eliminate mouse overshooting.</div>
+                    <div class="card-best" data-best-for="flicking" data-best-prefix="stab_" data-best-key="idx.best.stab" data-best-suffix=" ms" data-best-lower></div>
+                </div>
+                <div class="card-foot"><span class="card-tag" data-i18n="card.flicking.tag">Control</span><span class="card-launch">LAUNCH →</span></div>
+            </div>
+
+            <div class="card" data-module="apm" data-tone="370" data-url="modulos/apm_v2.html" style="--card-accent:var(--mech)">
+                <div class="card-head"><span class="card-code">M-06</span><span class="card-icon">⌨</span></div>
+                <div class="card-body">
+                    <div class="card-title" data-i18n="card.apm.title">APM Burst</div>
+                    <div class="card-desc" data-i18n="card.apm.desc">Keystroke cadence and rhythm under escalating BPM.</div>
+                    <div class="card-best" data-best-for="apm" data-best-prefix="peakbpm_" data-best-key="idx.best.peak" data-best-suffix=" bpm"></div>
+                </div>
+                <div class="card-foot"><span class="card-tag" data-i18n="card.apm.tag">Stamina</span><span class="card-launch">LAUNCH →</span></div>
+            </div>
+
+            <div class="card" data-module="typing" data-tone="330" data-url="modulos/typing_v1.html" style="--card-accent:#dc2626">
+                <div class="card-head"><span class="card-code">M-07</span><span class="card-icon" style="font-family:'Space Mono',monospace;font-weight:700">Aa</span></div>
+                <div class="card-body">
+                    <div class="card-title" data-i18n="card.typing.title">Typing Speed</div>
+                    <div class="card-desc" data-i18n="card.typing.desc">Words per minute with a competitive mindset wordlist.</div>
+                    <div class="card-best" data-best-for="typing" data-best-prefix="wpm_" data-best-key="idx.best.wpm" data-best-suffix=" wpm"></div>
+                </div>
+                <div class="card-foot"><span class="card-tag" data-i18n="card.typing.tag">Keystroke Speed</span><span class="card-launch">LAUNCH →</span></div>
+            </div>
+
+        </div>
+    </section>
+
+    <!-- COGNITIVE -->
+    <section>
+        <div class="sec-title">
+            <div class="sec-tag" style="color:var(--cog);border-color:var(--cog)">COG</div>
+            <div class="sec-name" data-i18n="home.sec.cog.name">Cognitive Processing</div>
+            <div class="sec-line"></div>
+        </div>
+        <div class="grid" id="grid-cog">
+
+            <div class="card" data-module="attention" data-tone="698" data-url="modulos/attention_v2.html" style="--card-accent:var(--cog)">
+                <div class="card-head"><span class="card-code">C-01</span><span class="card-icon">◈</span></div>
+                <div class="card-body">
+                    <div class="card-title" data-i18n="card.attention.title">Attention Split</div>
+                    <div class="card-desc" data-i18n="card.attention.desc">Dual-focus multitasking. Track and react simultaneously.</div>
+                    <div class="card-best" data-best-for="attention" data-best-prefix="focus_" data-best-key="idx.best.focus"></div>
+                </div>
+                <div class="card-foot"><span class="card-tag" data-i18n="card.attention.tag">Divided Focus</span><span class="card-launch">LAUNCH →</span></div>
+            </div>
+
+            <div class="card" data-module="stroop" data-tone="784" data-url="modulos/stroop_v2.html" style="--card-accent:#a855f7">
+                <div class="card-head"><span class="card-code">C-02</span><span class="card-icon">🧠</span></div>
+                <div class="card-body">
+                    <div class="card-title" data-i18n="card.stroop.title">Stroop Test</div>
+                    <div class="card-desc" data-i18n="card.stroop.desc">Inhibitory control. Process conflicting information under pressure.</div>
+                    <div class="card-best" data-best-for="stroop" data-best-prefix="rt_" data-best-key="idx.best.rt" data-best-suffix=" ms" data-best-lower></div>
+                </div>
+                <div class="card-foot"><span class="card-tag" data-i18n="card.stroop.tag">Mental Filtering</span><span class="card-launch">LAUNCH →</span></div>
+            </div>
+
+            <div class="card" data-module="neurogrid" data-tone="880" data-url="modulos/neurogrid_v2.html" style="--card-accent:var(--cog)">
+                <div class="card-head"><span class="card-code">C-03</span><span class="card-icon">▦</span></div>
+                <div class="card-body">
+                    <div class="card-title" data-i18n="card.neurogrid.title">NeuroGrid</div>
+                    <div class="card-desc" data-i18n="card.neurogrid.desc">Rule-based visual scanning and rapid decision making.</div>
+                    <div class="card-best" data-best-for="neurogrid" data-best-prefix="hpm_" data-best-key="idx.best.hpm" data-best-suffix="/min"></div>
+                </div>
+                <div class="card-foot"><span class="card-tag" data-i18n="card.neurogrid.tag">Visual Scanning</span><span class="card-launch">LAUNCH →</span></div>
+            </div>
+
+            <div class="card" data-module="pathpredict" data-tone="988" data-url="modulos/pathpredict_v2.html" style="--card-accent:#a855f7">
+                <div class="card-head"><span class="card-code">C-04</span><span class="card-icon">⟿</span></div>
+                <div class="card-body">
+                    <div class="card-title" data-i18n="card.pathpredict.title">Path Predict</div>
+                    <div class="card-desc" data-i18n="card.pathpredict.desc">Trajectory anticipation. Read movement, predict destination.</div>
+                    <div class="card-best" data-best-for="pathpredict" data-best-prefix="acc_" data-best-key="idx.best.accuracy" data-best-suffix="%"></div>
+                </div>
+                <div class="card-foot"><span class="card-tag" data-i18n="card.pathpredict.tag">Anticipation</span><span class="card-launch">LAUNCH →</span></div>
+            </div>
+
+            <div class="card" data-module="vortex" data-tone="1100" data-url="modulos/vortex_v1.html" style="--card-accent:#a855f7">
+                <div class="card-head"><span class="card-code">C-05</span><span class="card-icon">⊗</span></div>
+                <div class="card-body">
+                    <div class="card-title" data-i18n="card.vortex.title">Vortex</div>
+                    <div class="card-desc" data-i18n="card.vortex.desc">Aim-and-execute coordination. Mouse direction meets keypress.</div>
+                    <div class="card-best" data-best-for="vortex" data-best-prefix="acc_" data-best-key="idx.best.accuracy" data-best-suffix="%"></div>
+                </div>
+                <div class="card-foot"><span class="card-tag" data-i18n="card.vortex.tag">Coordination</span><span class="card-launch">LAUNCH →</span></div>
+            </div>
+
+            <div class="card" data-module="slidepuzzle" data-tone="840" data-url="modulos/slidepuzzle_v1.html" style="--card-accent:#a855f7">
+                <div class="card-head"><span class="card-code">C-06</span><span class="card-icon">▣</span></div>
+                <div class="card-body">
+                    <div class="card-title" data-i18n="card.slidepuzzle.title">Slide Puzzle</div>
+                    <div class="card-desc" data-i18n="card.slidepuzzle.desc">Classic 3×3 sliding puzzle. Spatial reasoning and planning.</div>
+                    <div class="card-best" data-best-for="slidepuzzle" data-best-prefix="moves_" data-best-key="idx.best.moves" data-best-suffix=" mov" data-best-lower></div>
+                </div>
+                <div class="card-foot"><span class="card-tag" data-i18n="card.slidepuzzle.tag">Planning</span><span class="card-launch">LAUNCH →</span></div>
+            </div>
+
+        </div>
+    </section>
+
+    <!-- AMBIENT — utility modules (not skill training) -->
+    <section>
+        <div class="sec-title">
+            <div class="sec-tag" style="color:#0ea5e9;border-color:#0ea5e9">AMB</div>
+            <div class="sec-name" data-i18n="home.sec.amb.name">Ambient Environment</div>
+            <div class="sec-line"></div>
+        </div>
+        <div class="grid" id="grid-amb">
+
+            <div class="card" data-module="soundscape" data-tone="1047" data-url="modulos/soundscape_v1.html" style="--card-accent:#0ea5e9">
+                <div class="card-head"><span class="card-code">A-01</span><span class="card-icon">∿</span></div>
+                <div class="card-body">
+                    <div class="card-title" data-i18n="card.soundscape.title">Soundscape</div>
+                    <div class="card-desc" data-i18n="card.soundscape.desc">Neuroacoustic environment. 5 cognitive targets × 6 sonic vehicles. Procedural Web Audio.</div>
+                    <div class="card-best" data-best-for="soundscape" data-best-label=""></div>
+                </div>
+                <div class="card-foot"><span class="card-tag" data-i18n="card.soundscape.tag">Pre-Training Utility</span><span class="card-launch">LAUNCH →</span></div>
+            </div>
+
+            <div class="card" data-module="breathing" data-tone="1175" data-url="modulos/breathing_v1.html" style="--card-accent:#22d3ee">
+                <div class="card-head"><span class="card-code">A-02</span><span class="card-icon">□</span></div>
+                <div class="card-body">
+                    <div class="card-title" data-i18n="card.breathing.title">Box Breathing</div>
+                    <div class="card-desc" data-i18n="card.breathing.desc">Interactive paced breathing. 4 protocols including Navy SEAL standard.</div>
+                    <div class="card-best" data-best-for="breathing" data-best-label=""></div>
+                </div>
+                <div class="card-foot"><span class="card-tag" data-i18n="card.breathing.tag">Autonomic Regulation</span><span class="card-launch">LAUNCH →</span></div>
+            </div>
+
+        </div>
+    </section>
+
+    <!-- INFO — reading content, not playable modules. Cards link to info.html. -->
+    <section>
+        <div class="sec-title">
+            <div class="sec-tag" style="color:#10b981;border-color:#10b981">INFO</div>
+            <div class="sec-name" data-i18n="home.sec.info.name">Information &amp; Science</div>
+            <div class="sec-line"></div>
+        </div>
+        <div class="grid" id="grid-info">
+
+            <div class="card" data-tone="784" data-url="info.html#modules" style="--card-accent:#10b981">
+                <div class="card-head"><span class="card-code">I-01</span><span class="card-icon">⌖</span></div>
+                <div class="card-body">
+                    <div class="card-title" data-i18n="home.info.howto.title">How it works</div>
+                    <div class="card-desc" data-i18n="home.info.howto.desc">What each module trains and how improvement shows up.</div>
+                </div>
+                <div class="card-foot"><span class="card-tag" data-i18n="home.info.howto.tag">Module guide</span><span class="card-launch">OPEN →</span></div>
+            </div>
+
+            <div class="card" data-tone="880" data-url="info.html#science" style="--card-accent:#10b981">
+                <div class="card-head"><span class="card-code">I-02</span><span class="card-icon">⚗</span></div>
+                <div class="card-body">
+                    <div class="card-title" data-i18n="home.info.science.title">The science</div>
+                    <div class="card-desc" data-i18n="home.info.science.desc">Real evidence, presented honestly.</div>
+                </div>
+                <div class="card-foot"><span class="card-tag" data-i18n="home.info.science.tag">Evidence-based</span><span class="card-launch">OPEN →</span></div>
+            </div>
+
+            <div class="card" data-tone="988" data-url="info.html#support" style="--card-accent:#10b981">
+                <div class="card-head"><span class="card-code">I-03</span><span class="card-icon">♡</span></div>
+                <div class="card-body">
+                    <div class="card-title" data-i18n="home.info.support.title">Support</div>
+                    <div class="card-desc" data-i18n="home.info.support.desc">How to keep the project alive if it helps you.</div>
+                </div>
+                <div class="card-foot"><span class="card-tag" data-i18n="home.info.support.tag">Keep it alive</span><span class="card-launch">OPEN →</span></div>
+            </div>
+
+        </div>
+    </section>
+</main>
+
+<!-- Settings overlay -->
+<div class="set-overlay" id="set-overlay" onclick="if(event.target===this)toggleSettings(false)">
+    <div class="set-panel">
+        <button class="set-close" onclick="toggleSettings(false)">✕</button>
+        <div class="mono" style="font-size:9px;letter-spacing:.2em;color:var(--t3);margin-bottom:8px" data-i18n="set.config">CONFIGURATION</div>
+        <div style="font-size:24px;font-weight:700;letter-spacing:.03em;margin-bottom:18px" data-i18n="set.title">Settings</div>
+
+        <div class="set-row">
+            <div>
+                <div class="set-label" data-i18n="set.sound">Sound</div>
+                <div class="set-hint" data-i18n="set.sound.hint">UI feedback + module audio</div>
+            </div>
+            <button class="set-toggle on" id="set-snd-btn" onclick="toggleSnd()">ON</button>
+        </div>
+
+        <div class="set-row">
+            <div>
+                <div class="set-label" data-i18n="set.mouse.game">Perfil de sensibilidad</div>
+                <div class="set-hint" data-i18n="set.mouse.game.hint">Se usa globalmente para simular el recoil</div>
+            </div>
+            <select class="set-select" id="set-mouse-profile" onchange="setMouseProfile(this.value)">
+                <option value="valorant">VALORANT</option>
+                <option value="cs2">COUNTER-STRIKE 2</option>
+                <option value="league">LEAGUE OF LEGENDS</option>
+            </select>
+        </div>
+
+        <div class="set-row">
+            <div>
+                <div class="set-label" data-i18n="set.mouse.speed">Sensibilidad del juego</div>
+                <div class="set-hint" data-i18n="set.mouse.speed.hint">Ajusta el patrón de Recoil Train, no tu ratón</div>
+            </div>
+            <div class="set-mouse-wrap">
+                <input type="range" id="set-mouse-sens" min="0.01" max="10" step="0.01" value="0.35" oninput="setMouseSensitivity(this.value)">
+                <input type="number" id="set-mouse-sens-number" min="0.01" max="10" step="0.01" value="0.35" inputmode="decimal" aria-label="Sensibilidad del juego" onchange="setMouseSensitivity(this.value)">
+            </div>
+        </div>
+
+        <div class="set-row">
+            <div>
+                <div class="set-label" data-i18n="set.volume">Volume</div>
+                <div class="set-hint" data-i18n="set.volume.hint">Master output level</div>
+            </div>
+            <div class="set-vol-wrap">
+                <input type="range" min="0" max="100" value="70" id="set-vol" oninput="setVol(this.value)">
+                <span class="set-vol-v" id="set-vol-v">70%</span>
+            </div>
+        </div>
+
+        <div class="set-row">
+            <div>
+                <div class="set-label" data-i18n="set.language">Language</div>
+                <div class="set-hint" data-i18n="set.language.hint">Interface language</div>
+            </div>
+            <div class="set-lang">
+                <button class="set-lang-btn" id="set-lang-es" onclick="I18N.set('es')">ES</button>
+                <button class="set-lang-btn" id="set-lang-en" onclick="I18N.set('en')">EN</button>
+            </div>
+        </div>
+
+        <div class="mono" style="font-size:9px;color:var(--t3);margin-top:24px;text-align:center;letter-spacing:.1em" data-i18n="set.footer">
+            More options coming. Settings persist across sessions.
+        </div>
+    </div>
+</div>
+
+<!-- Audio-ready hint — visible until first valid user gesture initializes audio.
+     Hover doesn't count as a valid gesture, so users who arrive and hover-first
+     would otherwise wonder why nothing sounds. -->
+<div class="audio-hint" id="audio-hint" style="--accent:#a855f7">
+    <div class="pulse-dot"></div>
+    <span>Click anywhere to enable sound</span>
+</div>
+
+<!-- Stats modal — opens on click of the B logo. Shows aggregated user stats
+     across all modules. Empty state for new users. -->
+<!-- ═══ Player Card Modal — opens from the B logo ═══ -->
+<script src="assets/i18n.js"></script>
+<script src="assets/shared.js"></script>
+<script src="assets/history.js"></script>
+<script src="assets/training-core.js"></script>
+<script src="assets/routine.js"></script>
+<script src="assets/player-card.js"></script>
+<script src="assets/workspace.js"></script>
+<script src="assets/experience.js"></script>
+<script>
+    /* ── Settings overlay ───────────────────────────────── */
+    function toggleSettings(show){
+        const o = document.getElementById('set-overlay');
+        o.classList.toggle('on', show);
+        document.body.style.overflow = show ? 'hidden' : '';
+        if(show) syncSettingsUI();
+    }
+    function syncSettingsUI(){
+        const sb = document.getElementById('set-snd-btn');
+        sb.textContent = Snd.on ? 'ON' : 'OFF';
+        sb.classList.toggle('on', Snd.on);
+        const vol = Math.round(Snd.getVolume() * 100);
+        document.getElementById('set-vol').value = vol;
+        document.getElementById('set-vol-v').textContent = vol + '%';
+        syncMouseSettingsUI();
+        syncLangButtons();
+    }
+    function syncLangButtons(){
+        const es = document.getElementById('set-lang-es');
+        const en = document.getElementById('set-lang-en');
+        if(es) es.classList.toggle('on', I18N.lang === 'es');
+        if(en) en.classList.toggle('on', I18N.lang === 'en');
+    }
+    // Keep the language highlight current whenever the language changes.
+    window.addEventListener('langchange', () => { syncLangButtons(); syncMouseSettingsUI(); });
+    function toggleSnd(){
+        Snd.toggle();
+        Snd.tick(880);  // confirmation tick — won't sound if just muted
+        syncSettingsUI();
+    }
+    function setVol(v){
+        const f = Math.max(0, Math.min(1, v / 100));
+        Snd.setVolume(f);
+        document.getElementById('set-vol-v').textContent = Math.round(f * 100) + '%';
+    }
+    function syncMouseSettingsUI(){
+        const current = BM.MouseSettings.get();
+        const profile = BM.MouseSettings.profiles[current.mouseProfile];
+        const select = document.getElementById('set-mouse-profile');
+        const range = document.getElementById('set-mouse-sens');
+        const number = document.getElementById('set-mouse-sens-number');
+        if(select) select.value = current.mouseProfile;
+        [range, number].forEach(el => { if(el){ el.min=profile.min; el.max=profile.max; el.step=profile.step; el.value=current.mouseSensitivity; } });
+    }
+    function setMouseProfile(profile){
+        BM.MouseSettings.setProfile(profile);
+        syncMouseSettingsUI();
+    }
+    function setMouseSensitivity(value){
+        BM.MouseSettings.setSensitivity(value);
+        syncMouseSettingsUI();
+    }
+
+    /* ── View mode (cards / icons) ──────────────────────── */
+    function setView(mode){
+        document.body.classList.toggle('view-icons', mode === 'icons');
+        document.querySelectorAll('.vt-btn').forEach(b => b.classList.toggle('on', b.dataset.view === mode));
+        Store.setGlobal('view', mode);
+    }
+    // Restore preference
+    const savedView = Store.getGlobal('view');
+    if(savedView === 'icons') setView('icons');
+    // Bind toggle buttons
+    document.querySelectorAll('.vt-btn').forEach(b => {
+        b.addEventListener('click', () => { Snd.tick(1320); setView(b.dataset.view); });
+    });
+
+    /* ── Launch (with per-module wood tone) ─────────────── */
+    function launch(url, tone){
+        Snd.launch(tone);
+        document.getElementById('loader').classList.add('active');
+        setTimeout(() => { window.location.href = url; }, 500);
+    }
+
+    /* Bind card clicks + hover ticks with per-module tone */
+    document.querySelectorAll('.card[data-url]').forEach(c => {
+        const tone = parseFloat(c.dataset.tone) || undefined;
+        c.addEventListener('click', () => launch(c.dataset.url, tone));
+        c.addEventListener('mouseenter', () => Snd.tick(tone));
+    });
+
+    /* Gear icon hover sound */
+    document.getElementById('gear-btn').addEventListener('mouseenter', () => Snd.tick(1320));
+
+    /* Render best scores under each card */
+    function renderBests(){
+        document.querySelectorAll('.card-best[data-best-for]').forEach(el => {
+            const mod = el.dataset.bestFor;
+            const prefix = el.dataset.bestPrefix;          // new prefix-scan path
+            const metric = el.dataset.bestMetric;          // legacy single-metric path (time only)
+            const key = el.dataset.bestKey;
+            const label = key ? I18N.t(key) : (el.dataset.bestLabel || 'BEST');
+            const suffix = el.dataset.bestSuffix || '';
+            const lower = el.hasAttribute('data-best-lower');
+            const decimals = parseInt(el.dataset.bestDecimals || '0', 10);
+
+            // Resolve the best either by scanning a prefix (all difficulties)
+            // or by exact metric (legacy — only used by Time).
+            let raw = null;
+            if(prefix !== undefined){
+                const found = Store.getBestByPrefix(mod, prefix, lower);
+                if(found) raw = found.value;
+            } else if(metric){
+                raw = Store.getBest(mod, metric);
+            }
+
+            // Ambient modules (Soundscape, Breathing): no metric configured.
+            const scored = !!(prefix !== undefined || metric);
+
+            if(raw !== null && raw !== undefined){
+                const shown = decimals > 0 ? raw.toFixed(decimals) : Math.round(raw);
+                el.innerHTML =
+                    '<span class="best-chip" title="'+(I18N.lang==='es'?'Última configuración válida; consulta Mi progreso para ver los parámetros.':'Latest eligible setup; see My progress for its parameters.')+'">' +
+                        '<span class="best-chip-mark">▴</span>' +
+                        '<span class="best-chip-label">' + label + '</span>' +
+                        '<span class="best-chip-value">' + shown +
+                            (suffix ? '<small>' + suffix.replace(/^ /,'') + '</small>' : '') +
+                        '</span>' +
+                    '</span>' + '<span class="bm-record-context">'+(I18N.lang==='es'?'Última configuración':'Latest setup')+'</span>';
+            } else if(scored){
+                el.innerHTML =
+                    '<span class="best-chip ghost">' +
+                        '<span class="best-chip-label">' + I18N.t('idx.best.none') + '</span>' +
+                    '</span>';
+            } else {
+                el.innerHTML = '';   // ambient modules: nothing to show
+            }
+        });
+    }
+    renderBests();
+    window.addEventListener('langchange', renderBests);
+
+    /* ── Audio readiness hint ───────────────────────────── */
+    // Hover doesn't initialize audio (browsers reject it as a user gesture).
+    // Show a hint until any valid gesture (click, key, tap) has happened.
+    const audioHint = document.getElementById('audio-hint');
+    function showAudioHintIfNeeded(){
+        // Only show if sound is enabled in settings AND ctx hasn't been created
+        if(Snd.on && !Snd.ready()){
+            // Small delay so the hint doesn't flash for users who click immediately
+            setTimeout(() => {
+                if(Snd.on && !Snd.ready()) audioHint.classList.add('on');
+            }, 1200);
+        }
+    }
+    function hideAudioHint(){ audioHint.classList.remove('on'); }
+
+    // shared.js dispatches this event when the ctx becomes available
+    window.addEventListener('bm-audio-ready', hideAudioHint);
+    // Defensive: also hide on first click anywhere (even if event fires before listener)
+    document.addEventListener('pointerdown', hideAudioHint, { once: true });
+
+    showAudioHintIfNeeded();
+
+    /* ── Close overlays with Escape ──────────────────────── */
+    document.addEventListener('keydown', (e) => {
+        if(e.key === 'Escape'){
+            if(document.getElementById('set-overlay').classList.contains('on')) toggleSettings(false);
+            if(document.getElementById('stats-modal').classList.contains('on')) closeStatsModal();
+        }
+    });
+
+    /* ──────────────────────────────────────────────────────────
+       BM Diagnostic — system stats modal
+       Opens on click of the B logo (top-left). Aggregates session data
+       from Store across all modules.
+       ────────────────────────────────────────────────────────── */
+    /* ══════════════════════════════════════════════════════════════════
+       PLAYER CARD
+       Opens from the B logo. A dossier-style card that shows the
+       player's best stats per module + global aggregates. The card is
+       fully customizable (palette, colors, pattern, font, nickname) and
+       can be exported as a PNG image — meant to be shared like a
+       gamer CV. The card itself is a DOM node; html2canvas renders it
+       to PNG on demand (lazy-loaded the first time export is used).
+       ══════════════════════════════════════════════════════════════════ */
+
+    // Module → how to read its best metric from its saved bests.
+    // Keeps the card SOURCE of truth aligned with the index card chips:
+    // the card shows the same per-module metric the chip shows, scanned
+    // across every difficulty bucket (best across all difficulties).
+    // Ambient modules (Soundscape, Breathing) have no metric → no row.
+</script>
+</body>
+</html>

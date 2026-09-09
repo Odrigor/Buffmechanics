@@ -1,0 +1,663 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BuffMechanics — Information</title>
+    <meta name="description" content="How each BuffMechanics module works, the science behind training, and how to support the project.">
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' fill='%2310b981'/%3E%3Ctext x='50%25' y='54%25' text-anchor='middle' dominant-baseline='middle' font-family='monospace' font-size='40' font-weight='700' fill='%23ffffff'%3EB%3C/text%3E%3Crect x='2' y='2' width='60' height='60' fill='none' stroke='%23ffffff' stroke-width='3'/%3E%3C/svg%3E">
+    <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="assets/shared.css">
+    <style>
+        :root{ --info:#10b981; --info-dim:rgba(16,185,129,.08); }
+
+        body{font-family:'Rajdhani',sans-serif;background:var(--bg);color:var(--t1);margin:0;min-height:100vh}
+        .wrap{max-width:920px;margin:0 auto;padding:0 20px 80px}
+
+        /* Header */
+        header{display:flex;align-items:center;gap:16px;padding:24px 0 20px;max-width:920px;margin:0 auto;padding-left:20px;padding-right:20px}
+        .back-link{display:inline-flex;align-items:center;gap:8px;font-family:'Space Mono',monospace;font-size:11px;font-weight:700;letter-spacing:.1em;color:var(--t2);text-decoration:none;border:1px solid var(--bd);padding:9px 16px;transition:all .2s;text-transform:uppercase}
+        .back-link:hover{border-color:var(--info);color:var(--info)}
+        .head-title{font-size:22px;font-weight:700;letter-spacing:.06em;text-transform:uppercase}
+        .head-spacer{flex:1}
+
+        /* Language selector */
+        .lang-sel{display:flex;align-items:center;gap:6px;border:1px solid var(--bd);padding:4px}
+        .lang-btn{background:none;border:none;font-family:'Space Mono',monospace;font-size:11px;font-weight:700;letter-spacing:.08em;color:var(--t3);padding:5px 12px;cursor:pointer;transition:all .2s}
+        .lang-btn:hover{color:var(--t1)}
+        .lang-btn.on{background:var(--info);color:#04110b}
+
+        /* Tabs */
+        .tabs{display:flex;gap:0;border-bottom:1px solid var(--bd);margin:8px 0 28px;max-width:920px}
+        .tab{flex:1;background:none;border:none;border-bottom:2px solid transparent;color:var(--t3);font-family:'Rajdhani',sans-serif;font-size:15px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;padding:14px 8px;cursor:pointer;transition:all .2s;margin-bottom:-1px}
+        .tab:hover{color:var(--t1)}
+        .tab.on{color:var(--info);border-bottom-color:var(--info)}
+
+        .panel{display:none;animation:fadeIn .3s ease}
+        .panel.on{display:block}
+        @keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+
+        .intro{font-family:'Rajdhani',sans-serif;font-size:16px;font-weight:500;color:var(--t2-5);line-height:1.6;margin-bottom:28px;max-width:680px}
+
+        /* Module guide cards */
+        .mod-card{background:var(--sf);border:1px solid var(--bd);border-left:3px solid var(--mcol,var(--info));margin-bottom:14px;overflow:hidden}
+        .mod-head{display:flex;align-items:center;gap:14px;padding:16px 20px;cursor:pointer;transition:background .2s}
+        .mod-head:hover{background:var(--sf2)}
+        .mod-icon{font-size:22px;color:var(--mcol,var(--info));width:28px;text-align:center;flex-shrink:0}
+        .mod-titles{flex:1;min-width:0}
+        .mod-name{font-size:19px;font-weight:700;letter-spacing:.03em}
+        .mod-what{font-family:'Rajdhani',sans-serif;font-size:14px;font-weight:500;color:var(--t2-5);line-height:1.45;margin-top:3px}
+        .mod-cat{font-family:'Space Mono',monospace;font-size:9px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--mcol,var(--info));border:1px solid;padding:3px 8px;flex-shrink:0}
+        .mod-chev{color:var(--t2);transition:transform .3s;flex-shrink:0;font-size:12px}
+        .mod-card.open .mod-chev{transform:rotate(90deg)}
+        .mod-detail{max-height:0;overflow:hidden;transition:max-height .35s cubic-bezier(.4,0,.2,1)}
+        .mod-card.open .mod-detail{max-height:400px}
+        .mod-detail-inner{padding:4px 20px 20px 62px}
+        .mod-field{margin-bottom:14px}
+        .mod-field:last-child{margin-bottom:0}
+        .mod-field-label{font-family:'Space Mono',monospace;font-size:9px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:var(--mcol,var(--info));opacity:.85;margin-bottom:6px}
+        .mod-field-text{font-size:15px;color:var(--t1);line-height:1.6}
+        .mod-field-text.measure{font-family:'Space Mono',monospace;font-size:13px;color:var(--mcol,var(--info))}
+
+        /* Science paper card */
+        .paper{background:var(--sf);border:1px solid var(--bd);padding:0;margin-bottom:20px;overflow:hidden}
+        .paper-level{display:flex;align-items:center;gap:8px;padding:12px 24px;font-family:'Space Mono',monospace;font-size:10px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;border-bottom:1px solid var(--bd)}
+        .paper-level.solid{background:rgba(34,197,94,.08);color:#22c55e}
+        .paper-level.bounded{background:rgba(234,179,8,.08);color:#eab308}
+        .paper-level.debated{background:rgba(239,68,68,.08);color:#ef4444}
+        .paper-dot{width:8px;height:8px;border-radius:50%;background:currentColor}
+        .paper-body{padding:22px 24px 24px}
+        .paper-q{font-size:24px;font-weight:700;letter-spacing:.02em;line-height:1.25;margin-bottom:8px}
+        .paper-cite{font-family:'Space Mono',monospace;font-size:11px;color:var(--t2);letter-spacing:.04em;margin-bottom:22px;line-height:1.6}
+        .paper-cite b{color:var(--t2);font-weight:700}
+        .paper-section{margin-bottom:20px}
+        .paper-section-label{font-family:'Space Mono',monospace;font-size:9px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:var(--t2);margin-bottom:8px}
+        .paper-list{margin:0;padding:0;list-style:none}
+        .paper-list li{font-size:14px;color:var(--t1);line-height:1.65;padding-left:18px;position:relative;margin-bottom:8px}
+        .paper-list li::before{content:'▸';position:absolute;left:0;color:var(--info)}
+        .paper-text{font-size:14px;color:var(--t1);line-height:1.7}
+        .paper-notsay{background:var(--bg);border:1px solid var(--bd);border-left:3px solid #ef4444;padding:14px 18px}
+        .paper-notsay .paper-section-label{color:#ef4444;margin-bottom:6px}
+        .paper-notsay .paper-text{color:var(--t2)}
+        .paper-source{display:inline-flex;align-items:center;gap:8px;margin-top:20px;font-family:'Space Mono',monospace;font-size:11px;font-weight:700;letter-spacing:.08em;color:var(--info);text-decoration:none;border:1px solid var(--bd);padding:9px 16px;transition:all .2s}
+        .paper-source:hover{border-color:var(--info);background:var(--info-dim)}
+        .science-more{font-family:'Rajdhani',sans-serif;font-size:14px;font-weight:500;color:var(--t2);text-align:center;line-height:1.6;padding:18px;border:1px dashed var(--bd);letter-spacing:.02em}
+
+        /* ═══ Library catalog (the science section as a shelf of entries) ═══ */
+        .lib-head{margin-bottom:6px}
+        .lib-eyebrow{font-family:'Space Mono',monospace;font-size:10px;font-weight:700;letter-spacing:.24em;color:var(--info);margin-bottom:10px}
+        .lib-count{font-family:'Space Mono',monospace;font-size:10px;letter-spacing:.12em;color:var(--t3);margin:20px 0 12px;text-transform:uppercase}
+        /* A catalog card — compact, clickable, opens the modal */
+        .lib-card{background:var(--sf);border:1px solid var(--bd);padding:0;margin-bottom:12px;cursor:pointer;transition:border-color .2s,transform .15s,box-shadow .2s;overflow:hidden;display:block;width:100%;text-align:left;font-family:inherit}
+        .lib-card:hover{border-color:var(--info);transform:translateY(-2px);box-shadow:0 6px 24px rgba(0,0,0,.3)}
+        .lib-card-level{display:flex;align-items:center;gap:8px;padding:9px 18px;font-family:'Space Mono',monospace;font-size:9px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;border-bottom:1px solid var(--bd)}
+        .lib-card-level.solid{background:rgba(34,197,94,.08);color:#22c55e}
+        .lib-card-level.bounded{background:rgba(234,179,8,.08);color:#eab308}
+        .lib-card-level.debated{background:rgba(239,68,68,.08);color:#ef4444}
+        .lib-card-body{padding:16px 18px 18px;display:flex;align-items:flex-start;justify-content:space-between;gap:16px}
+        .lib-card-main{flex:1;min-width:0}
+        .lib-card-q{font-size:18px;font-weight:700;letter-spacing:.01em;line-height:1.3;margin-bottom:6px;color:var(--t1)}
+        .lib-card-cite{font-family:'Space Mono',monospace;font-size:10px;color:var(--t2);letter-spacing:.02em;line-height:1.5}
+        .lib-card-cite b{color:var(--t2);font-weight:700}
+        .lib-card-read{flex-shrink:0;align-self:center;font-family:'Space Mono',monospace;font-size:10px;font-weight:700;letter-spacing:.1em;color:var(--info);display:flex;align-items:center;gap:6px;transition:transform .2s}
+        .lib-card:hover .lib-card-read{transform:translateX(3px)}
+
+        /* ═══ Reading modal ═══ */
+        .lib-modal{position:fixed;inset:0;z-index:200;display:none;align-items:flex-start;justify-content:center;padding:40px 20px;overflow-y:auto;background:rgba(2,4,8,.82);backdrop-filter:blur(4px);animation:libFade .2s ease}
+        .lib-modal.on{display:flex}
+        @keyframes libFade{from{opacity:0}to{opacity:1}}
+        .lib-modal-card{background:var(--sf);border:1px solid var(--bd);max-width:680px;width:100%;margin:auto;animation:libRise .26s cubic-bezier(.2,.7,.3,1)}
+        @keyframes libRise{from{opacity:0;transform:translateY(16px) scale(.99)}to{opacity:1;transform:translateY(0) scale(1)}}
+        .lib-modal-close{position:sticky;top:0;float:right;margin:10px 10px 0 0;background:var(--bg);border:1px solid var(--bd);color:var(--t2);width:30px;height:30px;cursor:pointer;font-size:15px;line-height:1;display:flex;align-items:center;justify-content:center;transition:all .2s;z-index:2}
+        .lib-modal-close:hover{border-color:var(--info);color:var(--t1)}
+
+        /* ═══ Copy-to-clipboard flash on crypto addresses (restored) ═══ */
+        .sup-addr.copied{border-color:#22c55e;animation:addrFlash .5s ease}
+        .sup-addr.copied .addr-hint{color:#22c55e}
+        .sup-addr.copied .addr-chain,.sup-addr.copied .addr-val{color:#22c55e}
+        @keyframes addrFlash{0%{background:var(--bg)}30%{background:rgba(34,197,94,.18)}100%{background:var(--bg)}}
+
+        /* Support tab — reuse the look from the home overlay */
+        .sup-eyebrow{font-family:'Space Mono',monospace;font-size:10px;letter-spacing:.2em;color:var(--t2);margin-bottom:10px}
+        .sup-head{font-size:26px;font-weight:700;letter-spacing:.03em;margin-bottom:18px;line-height:1.3}
+        .sup-head span{color:var(--cog)}
+        .sup-p{font-family:'Rajdhani',sans-serif;font-size:15px;font-weight:500;color:var(--t2-5);line-height:1.65;margin-bottom:16px;max-width:680px}
+        .sup-callout{background:var(--info-dim);border:1px solid var(--info);border-radius:2px;padding:16px 18px;margin:8px 0 8px;max-width:680px}
+        .sup-callout .sup-p{margin:0;color:var(--t1)}
+        .sup-options-label{font-family:'Space Mono',monospace;font-size:10px;letter-spacing:.2em;color:var(--t2);margin:26px 0 14px}
+        .sup-link{display:flex;align-items:center;gap:14px;background:var(--sf);border:1px solid var(--bd);padding:14px 18px;text-decoration:none;color:var(--t1);transition:all .2s;margin-bottom:12px;max-width:560px}
+        .sup-link:hover{border-color:var(--info);transform:translateY(-1px)}
+        .sup-link-icon{width:40px;height:40px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:16px;color:#fff;flex-shrink:0}
+        .sup-arrow{color:var(--t3);font-size:18px}
+        .sup-crypto{background:var(--sf);border:1px solid var(--bd);padding:16px 18px;max-width:560px}
+        .sup-addr{display:flex;align-items:center;gap:10px;background:var(--bg);border:1px solid var(--bd);padding:10px 12px;margin-top:8px;cursor:pointer;transition:all .2s}
+        .sup-addr:hover{border-color:var(--bdl)}
+        .addr-chain{font-size:10px;font-weight:700;flex-shrink:0;width:34px}
+        .addr-val{font-size:10px;color:var(--t2);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+        .addr-hint{font-size:8px;color:var(--t3);letter-spacing:.1em;flex-shrink:0}
+        .sup-footer{font-family:'Space Mono',monospace;font-size:10px;color:var(--t2);margin-top:28px;text-align:center;letter-spacing:.1em}
+
+        @media(max-width:600px){
+            .mod-detail-inner{padding-left:20px}
+            .tab{font-size:13px;letter-spacing:.04em}
+            .head-title{display:none}
+        }
+    </style>
+<link rel="stylesheet" href="assets/experience.css">
+<link rel="stylesheet" href="assets/workspace.css">
+</head>
+<body>
+
+<header>
+    <a class="back-link" href="index.html" data-i18n="nav.back">← Back to menu</a>
+    <div class="head-title" data-i18n="info.title">Information</div>
+    <div class="head-spacer"></div>
+    <div class="lang-sel">
+        <button class="lang-btn" id="lang-es" onclick="I18N.set('es')">ES</button>
+        <button class="lang-btn" id="lang-en" onclick="I18N.set('en')">EN</button>
+    </div>
+</header>
+
+<div class="tabs">
+    <button class="tab" id="tab-modules" onclick="showTab('modules')" data-i18n="info.tab.modules">How it works</button>
+    <button class="tab" id="tab-science" onclick="showTab('science')" data-i18n="info.tab.science">The science</button>
+    <button class="tab" id="tab-support" onclick="showTab('support')" data-i18n="info.tab.support">Support</button>
+</div>
+
+<div class="wrap">
+
+    <!-- ═══ HOW IT WORKS ═══ -->
+    <div class="panel" id="panel-modules">
+        <div class="intro" data-i18n="info.modules.intro"></div>
+        <div id="mod-list"></div>
+    </div>
+
+    <!-- ═══ THE SCIENCE — a small library of vetted studies ═══ -->
+    <div class="panel" id="panel-science">
+        <div class="lib-head">
+            <div class="lib-eyebrow" data-i18n="info.science.eyebrow">LIBRARY</div>
+            <div class="intro" data-i18n="info.science.intro"></div>
+        </div>
+
+        <div class="lib-count" id="lib-count"></div>
+
+        <!-- Catalog cards are rendered here by renderLibrary() -->
+        <div id="lib-list"></div>
+
+        <div class="science-more" data-i18n="info.science.more"></div>
+    </div>
+
+    <!-- Reading modal: opens when a catalog card is clicked -->
+    <div class="lib-modal" id="lib-modal" onclick="if(event.target===this)closeLib()">
+        <div class="lib-modal-card">
+            <button class="lib-modal-close" onclick="closeLib()" aria-label="Close">✕</button>
+            <div class="paper-level" id="lib-modal-level">
+                <span class="paper-dot"></span>
+                <span id="lib-modal-level-label"></span>
+            </div>
+            <div class="paper-body">
+                <div class="paper-q" id="lib-modal-q"></div>
+                <div class="paper-cite" id="lib-modal-cite"></div>
+
+                <div class="paper-section">
+                    <div class="paper-section-label" data-i18n="info.science.label.found"></div>
+                    <ul class="paper-list" id="lib-modal-found"></ul>
+                </div>
+
+                <div class="paper-section">
+                    <div class="paper-section-label" data-i18n="info.science.label.relates"></div>
+                    <div class="paper-text" id="lib-modal-relates"></div>
+                </div>
+
+                <div class="paper-notsay">
+                    <div class="paper-section-label" data-i18n="info.science.label.notsay"></div>
+                    <div class="paper-text" id="lib-modal-notsay"></div>
+                </div>
+
+                <a class="paper-source" id="lib-modal-source" href="#" target="_blank" rel="noopener">
+                    <span data-i18n="info.science.label.source">View source</span> →
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- ═══ SUPPORT ═══ -->
+    <div class="panel" id="panel-support">
+        <div class="sup-eyebrow" data-i18n="info.support.about">ABOUT THIS PROJECT</div>
+        <div class="sup-head" data-i18n-html="info.support.head">Building the future of competitive training</div>
+        <div class="sup-p" data-i18n="info.support.p1"></div>
+        <div class="sup-p" data-i18n="info.support.p2"></div>
+
+        <div class="sup-callout">
+            <div class="sup-p" data-i18n="info.support.callout"></div>
+        </div>
+
+        <div class="sup-options-label" data-i18n="info.support.options">SUPPORT OPTIONS</div>
+
+        <a href="https://www.paypal.com/paypalme/buffmechanics" target="_blank" rel="noopener" class="sup-link">
+            <div class="sup-link-icon" style="background:#0070ba">P</div>
+            <div style="text-align:left;flex:1">
+                <div style="font-size:15px;font-weight:700">PayPal</div>
+                <div class="mono" style="font-size:9px;color:var(--t2)" data-i18n="info.support.paypal.sub">One-time or recurring support</div>
+            </div>
+            <div class="sup-arrow">→</div>
+        </a>
+
+        <div class="sup-crypto">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+                <div class="sup-link-icon" style="background:var(--bg);border:1px solid var(--bd);color:var(--t2);font-size:12px">⛓</div>
+                <div style="text-align:left">
+                    <div style="font-size:15px;font-weight:700">Crypto</div>
+                    <div class="mono" style="font-size:9px;color:var(--t2)" data-i18n="info.support.crypto.sub">Click to copy address</div>
+                </div>
+            </div>
+            <div class="sup-addr" data-addr="0xBc67BeD8Ad5334Cb95A87Cb4722b7926785A4fe4">
+                <span class="mono addr-chain" style="color:#627eea">ETH</span>
+                <span class="mono addr-val">0xBc67BeD8Ad5334Cb95A87Cb4722b7926785A4fe4</span>
+                <span class="mono addr-hint">COPY</span>
+            </div>
+            <div class="sup-addr" data-addr="bc1qr94f53vgz9pzvclhzdt2t5y2q8qrprlxazd9qe">
+                <span class="mono addr-chain" style="color:#f7931a">BTC</span>
+                <span class="mono addr-val">bc1qr94f53vgz9pzvclhzdt2t5y2q8qrprlxazd9qe</span>
+                <span class="mono addr-hint">COPY</span>
+            </div>
+            <div class="sup-addr" data-addr="8eAod8R2LJSfRnzsTrR1qjLnTXvzXTYQieGggfZ6Tcux">
+                <span class="mono addr-chain" style="color:#9945ff">SOL</span>
+                <span class="mono addr-val">8eAod8R2LJSfRnzsTrR1qjLnTXvzXTYQieGggfZ6Tcux</span>
+                <span class="mono addr-hint">COPY</span>
+            </div>
+        </div>
+
+        <div class="sup-footer" data-i18n="info.support.footer"></div>
+    </div>
+
+</div>
+
+<script src="assets/i18n.js"></script>
+<script src="assets/shared.js"></script>
+<script src="assets/history.js"></script>
+<script src="assets/training-core.js"></script>
+<script src="assets/routine.js"></script>
+<script src="assets/experience.js"></script>
+<script>
+/* ============================================================================
+   Info page logic: tabs, module guide rendering, science content, i18n glue.
+   ========================================================================== */
+
+// ── Module guide data ──────────────────────────────────────────────────────
+// Each module: icon, accent color, category, and the four explanatory fields
+// in both languages. Kept as data (not hard HTML) so it's easy to translate
+// and maintain, and renders into #mod-list.
+const MODULE_GUIDE = [
+    // MECH
+    {id:'aim', icon:'◎', col:'#ef4444', cat:'MECH',
+     name:{es:'Aim Protocol', en:'Aim Protocol'},
+     what:{es:'Puntería: flicks y microajustes de memoria muscular.', en:'Aiming: flicks and muscle-memory micro-adjustments.'},
+     trains:{es:'La capacidad de mover el cursor a un objetivo nuevo de forma rápida y precisa, y de afinar la posición final con ajustes pequeños.',
+             en:'Moving your cursor to a new target quickly and precisely, then fine-tuning the final position with small adjustments.'},
+     ingame:{es:'En FPS: llegas al enemigo más rápido tras un flick y el crosshair queda donde quieres sin pasarte. Menos "corregir dos veces".',
+             en:'In FPS: you land on the enemy faster after a flick and the crosshair sits where you want without overshooting. Less "correcting twice".'},
+     measure:{es:'Mira tu hits/sec por duración. Debería subir semana a semana en la misma dificultad.',
+              en:'Watch your hits/sec per duration. It should climb week over week at the same difficulty.'}},
+    {id:'time', icon:'⚡', col:'#f97316', cat:'MECH',
+     name:{es:'Reaction Time', en:'Reaction Time'},
+     what:{es:'Latencia visomotora pura: ver el estímulo y reaccionar.', en:'Pure visuomotor latency: see the cue, react.'},
+     trains:{es:'El tiempo entre que aparece un estímulo y tu respuesta motora. Es una medida base de tu sistema nervioso.',
+             en:'The time between a cue appearing and your motor response. A baseline measure of your nervous system.'},
+     ingame:{es:'Reaccionas antes a un enemigo que aparece, a un peek, a un sonido. Los primeros milisegundos de cada duelo.',
+             en:'You react sooner to an enemy appearing, a peek, a sound. The first milliseconds of every duel.'},
+     measure:{es:'Tu promedio en ms (más bajo = mejor). La clasificación por percentil te ubica respecto a la población real.',
+              en:'Your average in ms (lower = better). The percentile classification places you against the real population.'}},
+    {id:'tracking', icon:'⊚', col:'#f97316', cat:'MECH',
+     name:{es:'Target Tracking', en:'Target Tracking'},
+     what:{es:'Mantener el cursor sobre un objetivo en movimiento.', en:'Keeping your cursor on a moving target.'},
+     trains:{es:'El control continuo del cursor para seguir un blanco que se mueve y cambia de dirección.',
+             en:'Continuous cursor control to follow a target that moves and changes direction.'},
+     ingame:{es:'Mantienes el aim sobre enemigos que se desplazan (sprays, tracking de movimiento lateral). Clave en juegos de bala sostenida.',
+             en:'You keep aim on moving enemies (sprays, lateral movement tracking). Key in sustained-fire games.'},
+     measure:{es:'Tu lock % (tiempo sobre el objetivo). Debería subir en la misma dificultad.',
+              en:'Your lock % (time on target). It should rise at the same difficulty.'}},
+    {id:'clicktime', icon:'◴', col:'#f59e0b', cat:'MECH',
+     name:{es:'Click Timing', en:'Click Timing'},
+     what:{es:'Clickear en el momento exacto de un ciclo.', en:'Clicking at the exact moment of a cycle.'},
+     trains:{es:'La sincronización de tu click con un instante preciso, leyendo el ritmo de un objeto en movimiento.',
+             en:'Synchronizing your click with a precise instant, reading the rhythm of a moving object.'},
+     ingame:{es:'Timing de habilidades, parries, last-hits, disparos sincronizados. Cualquier acción que premia el instante justo.',
+             en:'Ability timing, parries, last-hits, synced shots. Any action that rewards the exact instant.'},
+     measure:{es:'Tu perfect rate % (clicks en el peak exacto). Por modo (Lunar / Jupiter).',
+              en:'Your perfect rate % (clicks at the exact peak). Per mode (Lunar / Jupiter).'}},
+    {id:'flicking', icon:'✦', col:'#ef4444', cat:'MECH',
+     name:{es:'Anti-Flick Stability', en:'Anti-Flick Stability'},
+     what:{es:'Frenar el cursor tras un flick y mantenerlo quieto.', en:'Stopping the cursor after a flick and holding it still.'},
+     trains:{es:'La desaceleración: detener el movimiento rápido del cursor sin temblar ni pasarte.',
+             en:'Deceleration: stopping fast cursor movement without shaking or overshooting.'},
+     ingame:{es:'Tras un flick rápido, el crosshair se asienta de inmediato en vez de oscilar. Disparas antes y más certero.',
+             en:'After a fast flick, the crosshair settles immediately instead of wobbling. You fire sooner and truer.'},
+     measure:{es:'Tu tiempo de estabilización en ms (más bajo = frenas más rápido).',
+              en:'Your stabilize time in ms (lower = you brake faster).'}},
+    {id:'apm', icon:'⌨', col:'#ef4444', cat:'MECH',
+     name:{es:'APM Burst', en:'APM Burst'},
+     what:{es:'Velocidad y ritmo de pulsación de teclas.', en:'Keystroke speed and rhythm.'},
+     trains:{es:'La capacidad de ejecutar inputs de teclado rápido y en ritmo, sosteniendo cadencias altas.',
+             en:'Executing keyboard inputs fast and on-rhythm, sustaining high cadences.'},
+     ingame:{es:'En RTS / MOBA / fighting: más acciones por minuto, combos y rotaciones más limpias bajo presión.',
+             en:'In RTS / MOBA / fighting: more actions per minute, cleaner combos and rotations under pressure.'},
+     measure:{es:'Tu peak BPM (ritmo máximo sostenido). Por cantidad de teclas.',
+              en:'Your peak BPM (max sustained tempo). Per key count.'}},
+    {id:'typing', icon:'Aa', col:'#dc2626', cat:'MECH',
+     name:{es:'Typing Speed', en:'Typing Speed'},
+     what:{es:'Velocidad y precisión de escritura.', en:'Typing speed and accuracy.'},
+     trains:{es:'La fluidez de tus dedos en el teclado: velocidad real (neta) sin sacrificar precisión.',
+             en:'Finger fluency on the keyboard: real (net) speed without sacrificing accuracy.'},
+     ingame:{es:'Comms más rápidas en el chat sin soltar el ritmo del juego. Útil en cualquier título con texto en vivo.',
+             en:'Faster comms in chat without dropping your game rhythm. Useful in any title with live text.'},
+     measure:{es:'Tu WPM neto y tu consistencia. Por duración.',
+              en:'Your net WPM and consistency. Per duration.'}},
+    // COG
+    {id:'attention', icon:'◈', col:'#3b82f6', cat:'COG',
+     name:{es:'Attention Split', en:'Attention Split'},
+     what:{es:'Hacer dos tareas a la vez: trackear y reaccionar.', en:'Doing two tasks at once: tracking and reacting.'},
+     trains:{es:'La atención dividida: sostener una tarea continua (seguir la esfera) mientras respondes a eventos discretos (los números).',
+             en:'Divided attention: holding a continuous task (track the sphere) while responding to discrete events (the numbers).'},
+     ingame:{es:'Sigues a un enemigo mientras lees el minimapa, escuchas pasos y vigilas tu HUD. El "multitasking" real del juego.',
+             en:'You track an enemy while reading the minimap, hearing steps and watching your HUD. The real "multitasking" of play.'},
+     measure:{es:'Tu focus score (accuracy × lock). Premia hacer bien las dos cosas a la vez.',
+              en:'Your focus score (accuracy × lock). Rewards doing both well at once.'}},
+    {id:'stroop', icon:'▤', col:'#a855f7', cat:'COG',
+     name:{es:'Stroop', en:'Stroop'},
+     what:{es:'Responder al color ignorando lo que dice la palabra.', en:'Responding to the color, ignoring the word.'},
+     trains:{es:'El control inhibitorio: frenar la respuesta automática (leer) para dar la correcta (el color).',
+             en:'Inhibitory control: suppressing the automatic response (reading) to give the correct one (the color).'},
+     ingame:{es:'Evitas el "tilt-click": no disparas al aliado, no usas la habilidad equivocada por impulso, no caes en fintas.',
+             en:'You avoid the "tilt-click": no shooting the ally, no wrong ability on impulse, not falling for fakes.'},
+     measure:{es:'Tu tiempo de respuesta en ms bajo interferencia (con accuracy alta).',
+              en:'Your response time in ms under interference (with high accuracy).'}},
+    {id:'neurogrid', icon:'⌗', col:'#3b82f6', cat:'COG',
+     name:{es:'NeuroGrid', en:'NeuroGrid'},
+     what:{es:'Escanear y disparar según una regla que cambia.', en:'Scanning and shooting by a rule that changes.'},
+     trains:{es:'El escaneo visual y la flexibilidad cognitiva: procesar muchos estímulos y cambiar de criterio cuando la regla cambia.',
+             en:'Visual scanning and cognitive flexibility: processing many stimuli and switching criteria when the rule changes.'},
+     ingame:{es:'Identificas amenazas válidas en una pantalla cargada y adaptas tu objetivo cuando la situación cambia.',
+             en:'You identify valid threats on a busy screen and adapt your target when the situation shifts.'},
+     measure:{es:'Tus hits/min (con accuracy alta). Por dificultad.',
+              en:'Your hits/min (with high accuracy). Per difficulty.'}},
+    {id:'pathpredict', icon:'⟿', col:'#a855f7', cat:'COG',
+     name:{es:'Path Predict', en:'Path Predict'},
+     what:{es:'Predecir dónde caerá un objeto en movimiento.', en:'Predicting where a moving object will land.'},
+     trains:{es:'La extrapolación de movimiento: leer una trayectoria y anticipar su destino.',
+             en:'Movement extrapolation: reading a trajectory and anticipating its destination.'},
+     ingame:{es:'Aciertas skillshots, lideras el tiro a objetivos en movimiento, interceptas. Anticipas en vez de reaccionar tarde.',
+             en:'You hit skillshots, lead your shots on moving targets, intercept. You anticipate instead of reacting late.'},
+     measure:{es:'Tu accuracy % de predicción y tu distancia media de error.',
+              en:'Your prediction accuracy % and your average miss distance.'}},
+    {id:'vortex', icon:'⊗', col:'#a855f7', cat:'COG',
+     name:{es:'Vortex', en:'Vortex'},
+     what:{es:'Apuntar una dirección con el mouse y ejecutar con la tecla correcta, a la vez.', en:'Aiming a direction with the mouse and executing with the right key, at the same time.'},
+     trains:{es:'La coordinación mano-mouse y mano-teclado en paralelo: orientar con una mano mientras seleccionas y ejecutas con la otra, bajo presión de tiempo.',
+             en:'Parallel mouse-hand and keyboard-hand coordination: orienting with one hand while you select and execute with the other, under time pressure.'},
+     ingame:{es:'El patrón base de un MOBA o shooter: apuntas hacia un lado mientras lanzas la habilidad o el ítem correcto. Menos errores de "apunté bien pero apreté la tecla equivocada".',
+             en:'The core pattern of a MOBA or shooter: you aim one way while firing the right ability or item. Fewer "aimed right but hit the wrong key" mistakes.'},
+     measure:{es:'Tu precisión de reventado (% de esferas acertadas) y tu tiempo de reacción medio.',
+              en:'Your pop accuracy (% of orbs hit) and your average reaction time.'}},
+    {id:'slidepuzzle', icon:'▦', col:'#a855f7', cat:'COG',
+     name:{es:'Slide Puzzle', en:'Slide Puzzle'},
+     what:{es:'Resolver un puzzle deslizante en pocos movimientos.', en:'Solving a sliding puzzle in few moves.'},
+     trains:{es:'La planificación y la memoria de trabajo espacial: pensar varios pasos adelante.',
+             en:'Planning and spatial working memory: thinking several steps ahead.'},
+     ingame:{es:'Mejor planificación de rotaciones, builds y secuencias. La cabeza fría que ordena el caos.',
+             en:'Better planning of rotations, builds and sequences. The cool head that orders chaos.'},
+     measure:{es:'La menor cantidad de movimientos para resolver.',
+              en:'The fewest moves to solve.'}},
+    // AMB
+    {id:'soundscape', icon:'∿', col:'#0ea5e9', cat:'AMB',
+     name:{es:'Soundscape', en:'Soundscape'},
+     what:{es:'Entorno sonoro para enfocar antes de entrenar.', en:'A sonic environment to focus before training.'},
+     trains:{es:'No es entrenamiento de habilidad: es una utilidad. Ambientes neuroacústicos para regular tu estado antes de jugar.',
+             en:'Not a skill drill: it\'s a utility. Neuroacoustic environments to regulate your state before playing.'},
+     ingame:{es:'Te ayuda a entrar en foco o a calmarte antes de una sesión, según el modo que elijas.',
+             en:'Helps you get into focus or calm down before a session, depending on the mode you pick.'},
+     measure:{es:'No tiene puntaje. Úsalo como ritual previo al entrenamiento.',
+              en:'No score. Use it as a pre-training ritual.'}},
+    {id:'breathing', icon:'□', col:'#22d3ee', cat:'AMB',
+     name:{es:'Box Breathing', en:'Box Breathing'},
+     what:{es:'Respiración pautada para regular el sistema nervioso.', en:'Paced breathing to regulate the nervous system.'},
+     trains:{es:'Utilidad de regulación autonómica: ralentizar la respiración baja la activación y estabiliza el pulso.',
+             en:'An autonomic-regulation utility: slowing the breath lowers arousal and steadies the pulse.'},
+     ingame:{es:'Bajas el tilt entre rondas, recuperas la calma tras una jugada tensa, entras más estable a la siguiente.',
+             en:'You lower tilt between rounds, recover after a tense play, enter the next one steadier.'},
+     measure:{es:'No tiene puntaje. Úsalo entre partidas o antes de momentos de presión.',
+              en:'No score. Use it between matches or before high-pressure moments.'}}
+];
+
+MODULE_GUIDE.forEach(m=>{
+    m.ingame={es:'El ejercicio propone practicar una tarea relacionada con esta habilidad. La transferencia a un juego concreto no se mide aquí.',en:'This exercise offers practice on a related task. Transfer to a specific game is not measured here.'};
+});
+Object.assign(MODULE_GUIDE.find(m=>m.id==='time'),{
+    what:{es:'Responder con un clic a una señal visual.',en:'Respond to a visual cue with a click.'},
+    trains:{es:'Mide el intervalo entre la señal y el clic, incluido el tiempo de respuesta del navegador y los dispositivos.',en:'Measures the interval from cue to click, including browser and device response time.'},
+    measure:{es:'Promedio de respuestas válidas en ms. Se necesitan 5; las inferiores a 100 ms se excluyen por una regla de la aplicación. Compara sesiones equivalentes, sin percentiles poblacionales.',en:'Mean valid response in ms. At least 5 are required; responses below 100 ms are excluded by an application rule. Compare equivalent sessions without population percentiles.'}
+});
+MODULE_GUIDE.find(m=>m.id==='aim').measure={es:'Aciertos por segundo y precisión en la misma configuración.',en:'Hits per second and accuracy under the same setup.'};
+MODULE_GUIDE.find(m=>m.id==='tracking').measure={es:'Porcentaje de tiempo activo sobre el objetivo, con la misma configuración.',en:'Percentage of active time on target, under the same setup.'};
+MODULE_GUIDE.find(m=>m.id==='flicking').measure={es:'Tiempo desde que aparece el objetivo hasta completar la permanencia. Se separan llegada, ajuste y permanencia exigida.',en:'Time from target appearance to completed hold. Arrival, adjustment and required hold are shown separately.'};
+MODULE_GUIDE.find(m=>m.id==='apm').measure={es:'Mayor tempo sostenido durante 10 aciertos consecutivos, con al menos 90% de precisión global.',en:'Highest tempo sustained across 10 consecutive hits, with at least 90% overall accuracy.'};
+Object.assign(MODULE_GUIDE.find(m=>m.id==='soundscape'),{
+    what:{es:'Audio ambiental con ritmos y texturas seleccionables.',en:'Ambient audio with selectable rhythms and textures.'},
+    trains:{es:'Elige el ambiente que prefieras. La aplicación no mide cambios cognitivos o fisiológicos producidos por el audio.',en:'Choose the environment you prefer. The application does not measure cognitive or physiological effects of audio.'},
+    measure:{es:'Sin puntuación. Mantén una pestaña dedicada: el sonido se detiene al salir de esta página.',en:'No score. Keep a dedicated tab: sound stops when you leave this page.'}
+});
+Object.assign(MODULE_GUIDE.find(m=>m.id==='breathing'),{
+    what:{es:'Una guía visual y sonora para seguir una pauta de respiración.',en:'A visual and optional audio guide for paced breathing.'},
+    trains:{es:'Registra ciclos y tiempo; no mide estrés, pulso ni regulación del sistema nervioso.',en:'Records cycles and time; it does not measure stress, pulse or nervous-system regulation.'},
+    measure:{es:'Tiempo activo y ciclos completados, sin récord competitivo.',en:'Active time and completed cycles, without competitive records.'}
+});
+
+// ── Library of vetted studies ────────────────────────────────────────────
+// Each entry is self-contained: evidence level, the question (title), a short
+// citation for the catalog card, the source URL, and the full breakdown shown
+// in the reading modal. Add new studies by pushing to this array — the catalog
+// and modal pick them up automatically. Text lives here (next to the page that
+// shows it) rather than in i18n.js.
+const PAPERS = [
+    {
+        id: 'p1',
+        level: 'bounded',                       // solid | bounded | debated
+        source: 'https://doi.org/10.1037/bul0000130',
+        q:    { es: '¿Jugar mejora tu atención visual?',
+                en: 'Does gaming improve your visual attention?' },
+        cite: { es: 'Meta-análisis · <b>Bediou et al. (2018)</b> · Psychological Bulletin · agrega ~15 años de estudios (2000–2015)',
+                en: 'Meta-analysis · <b>Bediou et al. (2018)</b> · Psychological Bulletin · aggregates ~15 years of studies (2000–2015)' },
+        found: {
+            es: [
+                'Los jugadores habituales de juegos de acción superan a los no-jugadores en tareas de atención visual, con un efecto medio (g ≈ 0,55).',
+                'Cuando se entrena de forma controlada (no solo comparar gamers vs no-gamers), el juego SÍ causa mejoras — pero más modestas (g ≈ 0,34).',
+                'No se halló beneficio significativo en memoria ni en control cognitivo general.'
+            ],
+            en: [
+                'Habitual action-game players outperform non-players on visual attention tasks, with a medium effect (g ≈ 0.55).',
+                'Under controlled training (not just comparing gamers vs non-gamers), gaming DOES cause improvement — but more modest (g ≈ 0.34).',
+                'No significant benefit was found for memory or general cognitive control.'
+            ]
+        },
+        relates: { es: 'Los módulos cognitivos (Attention, NeuroGrid, Stroop, Path Predict, Vortex) entrenan justamente las habilidades donde la evidencia es más fuerte: atención visual selectiva, escaneo y procesamiento. No prometemos hacerte más inteligente — ofrecemos entrenar lo que la ciencia sí respalda.',
+                   en: 'The cognitive modules (Attention, NeuroGrid, Stroop, Path Predict, Vortex) train exactly the skills where the evidence is strongest: selective visual attention, scanning and processing. We don\'t promise to make you smarter — we offer training for what the science actually supports.' },
+        notsay:  { es: 'Que jugar te haga mejor en todo. El efecto es específico a habilidades visuales y atencionales — el mismo meta-análisis NO encontró mejoras significativas en memoria ni en control cognitivo general. Y ojo: que los gamers tengan mejor atención no prueba por sí solo que el juego sea la causa; el efecto cuando se entrena de forma controlada es real pero más modesto.',
+                   en: 'That gaming makes you better at everything. The effect is specific to visual and attentional skills — the same meta-analysis found NO significant gains in memory or general cognitive control. And note: gamers having better attention doesn\'t by itself prove gaming is the cause; the effect under controlled training is real but more modest.' }
+    }
+];
+
+// ── Tab switching ────────────────────────────────────────────────────────
+function showTab(name, push){
+    ['modules','science','support'].forEach(t=>{
+        document.getElementById('panel-'+t).classList.toggle('on', t===name);
+        document.getElementById('tab-'+t).classList.toggle('on', t===name);
+    });
+    if(push!==false){
+        try{ history.replaceState(null,'','#'+name); }catch(e){}
+    }
+    if(window.Snd) Snd.tick(784);
+}
+
+// ── Render the module guide ──────────────────────────────────────────────
+function renderModuleGuide(){
+    const list=document.getElementById('mod-list');
+    const L=I18N.lang;
+    list.innerHTML='';
+    MODULE_GUIDE.forEach(m=>{
+        const card=document.createElement('div');
+        card.className='mod-card';
+        card.style.setProperty('--mcol', m.col);
+        card.innerHTML=`
+            <div class="mod-head">
+                <span class="mod-icon">${m.icon}</span>
+                <div class="mod-titles">
+                    <div class="mod-name">${m.name[L]}</div>
+                    <div class="mod-what">${m.what[L]}</div>
+                </div>
+                <span class="mod-cat">${m.cat}</span>
+                <span class="mod-chev">▸</span>
+            </div>
+            <div class="mod-detail">
+                <div class="mod-detail-inner">
+                    <div class="mod-field">
+                        <div class="mod-field-label">${I18N.t('info.modules.col.trains')}</div>
+                        <div class="mod-field-text">${m.trains[L]}</div>
+                    </div>
+                    <div class="mod-field">
+                        <div class="mod-field-label">${I18N.t('info.modules.col.ingame')}</div>
+                        <div class="mod-field-text">${m.ingame[L]}</div>
+                    </div>
+                    <div class="mod-field">
+                        <div class="mod-field-label">${I18N.t('info.modules.col.measure')}</div>
+                        <div class="mod-field-text measure">${m.measure[L]}</div>
+                    </div>
+                </div>
+            </div>`;
+        card.querySelector('.mod-head').addEventListener('click',()=>{
+            card.classList.toggle('open');
+            if(window.Snd) Snd.tick(parseFloat(m.col)||700);
+        });
+        list.appendChild(card);
+    });
+}
+
+// ── Render the library catalog (compact cards) ───────────────────────────
+function renderLibrary(){
+    const L=I18N.lang;
+    const list=document.getElementById('lib-list');
+    const count=document.getElementById('lib-count');
+    if(!list) return;
+
+    // Entry count line ("1 entrada" / "N entradas")
+    if(count){
+        count.textContent = PAPERS.length===1
+            ? I18N.t('info.science.count.one')
+            : PAPERS.length + ' ' + I18N.t('info.science.count.many');
+    }
+
+    list.innerHTML='';
+    PAPERS.forEach(p=>{
+        const card=document.createElement('button');
+        card.className='lib-card';
+        card.type='button';
+        card.innerHTML=`
+            <div class="lib-card-level ${p.level}">
+                <span class="paper-dot"></span>
+                <span>${I18N.t('info.science.level.'+p.level)}</span>
+            </div>
+            <div class="lib-card-body">
+                <div class="lib-card-main">
+                    <div class="lib-card-q">${p.q[L]}</div>
+                    <div class="lib-card-cite">${p.cite[L]}</div>
+                </div>
+                <span class="lib-card-read">${I18N.t('info.science.read')} →</span>
+            </div>`;
+        card.addEventListener('click',()=>openLib(p.id));
+        list.appendChild(card);
+    });
+}
+
+// ── Open the reading modal for a given paper ──────────────────────────────
+function openLib(id, silent){
+    const L=I18N.lang;
+    const p=PAPERS.find(x=>x.id===id);
+    if(!p) return;
+
+    const lvl=document.getElementById('lib-modal-level');
+    lvl.className='paper-level '+p.level;
+    document.getElementById('lib-modal-level-label').textContent=I18N.t('info.science.level.'+p.level);
+    document.getElementById('lib-modal-q').textContent=p.q[L];
+    document.getElementById('lib-modal-cite').innerHTML=p.cite[L];
+    document.getElementById('lib-modal-relates').textContent=p.relates[L];
+    document.getElementById('lib-modal-notsay').textContent=p.notsay[L];
+    document.getElementById('lib-modal-source').href=p.source;
+
+    const ul=document.getElementById('lib-modal-found');
+    ul.innerHTML='';
+    p.found[L].forEach(item=>{
+        const li=document.createElement('li');
+        li.textContent=item;
+        ul.appendChild(li);
+    });
+
+    const modal=document.getElementById('lib-modal');
+    modal.classList.add('on');
+    modal.dataset.open=id;
+    document.body.style.overflow='hidden';   // lock scroll behind the modal
+    if(!silent && window.Snd) Snd.tick(880);
+}
+function closeLib(){
+    const modal=document.getElementById('lib-modal');
+    modal.classList.remove('on');
+    delete modal.dataset.open;
+    document.body.style.overflow='';
+    if(window.Snd) Snd.tick(523);
+}
+// Close on Escape
+window.addEventListener('keydown', e=>{
+    if(e.key==='Escape'){
+        const modal=document.getElementById('lib-modal');
+        if(modal && modal.classList.contains('on')) closeLib();
+    }
+});
+
+// ── Update the language button highlight ─────────────────────────────────
+function syncLangButtons(){
+    document.getElementById('lang-es').classList.toggle('on', I18N.lang==='es');
+    document.getElementById('lang-en').classList.toggle('on', I18N.lang==='en');
+}
+
+// ── Re-render everything that's built in JS when language changes ─────────
+function renderAll(){
+    renderModuleGuide();
+    renderLibrary();
+    syncLangButtons();
+    // If the reading modal is open, re-render it in the new language.
+    const modal=document.getElementById('lib-modal');
+    if(modal && modal.classList.contains('on') && modal.dataset.open){
+        openLib(modal.dataset.open, true);
+    }
+}
+
+window.addEventListener('langchange', renderAll);
+
+// ── Init ─────────────────────────────────────────────────────────────────
+// i18n auto-init already ran (it applies data-i18n). We render the JS-built
+// content, wire crypto copy, and open the tab from the URL hash.
+document.addEventListener('DOMContentLoaded', ()=>{
+    renderAll();
+
+    // Crypto address copy (reuse the shared helper)
+    document.querySelectorAll('.sup-addr[data-addr]').forEach(el=>{
+        el.addEventListener('click', ()=>{
+            if(window.BM && BM.copyToClipboard) BM.copyToClipboard(el.dataset.addr, el, 'COPY');
+        });
+    });
+
+    // Open tab from #hash (#modules / #science / #support), default modules
+    const hash=(location.hash||'').replace('#','');
+    showTab(['modules','science','support'].includes(hash)?hash:'modules', false);
+});
+</script>
+</body>
+</html>
