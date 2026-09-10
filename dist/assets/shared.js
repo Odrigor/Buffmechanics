@@ -621,7 +621,7 @@
              accent   CSS color for tinting in switcher tiles
              url      relative path from /modulos/ to the module HTML */
         MODULES: [
-            {code:'aim',         name:'Aim Protocol',    icon:'◎', tone:622, accent:'#ef4444', url:'aim_v2.html',         category:'mech'},
+            {code:'aim',         name:'Aim Room',        icon:'◎', tone:622, accent:'#ef4444', url:'aim_v2.html',         category:'mech'},
             {code:'time',        name:'Reaction Time',   icon:'⚡', tone:554, accent:'#f97316', url:'time_v3.html',        category:'mech'},
             {code:'tracking',    name:'Smooth Tracking', icon:'◉', tone:494, accent:'#f97316', url:'tracking_v2.html',    category:'mech'},
             {code:'clicktime',   name:'Click Timing',    icon:'⊕', tone:466, accent:'#f59e0b', url:'clicktime_v2.html',   category:'mech'},

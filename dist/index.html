@@ -104,7 +104,7 @@
         .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:20px;margin-bottom:56px}
 
         /* Cards */
-        .card{background:var(--sf);border:1px solid var(--bd);cursor:pointer;transition:all .3s cubic-bezier(.165,.84,.44,1);position:relative;overflow:hidden}
+        .card{display:block;background:var(--sf);border:1px solid var(--bd);color:inherit;text-decoration:none;cursor:pointer;transition:all .3s cubic-bezier(.165,.84,.44,1);position:relative;overflow:hidden}
         .card:hover{background:var(--sf2);border-color:var(--card-accent);transform:translateY(-4px) scale(1.025);box-shadow:0 10px 28px rgba(0,0,0,.5)}
         .card::before{content:'';position:absolute;left:0;top:0;bottom:0;width:2px;background:var(--card-accent);opacity:.2;transition:opacity .3s}
         .card:hover::before{opacity:1}
@@ -284,15 +284,15 @@
         </div>
         <div class="grid" id="grid-mech">
 
-            <div class="card" data-module="aim" data-tone="622" data-url="modulos/aim_v2.html" style="--card-accent:var(--mech)">
+            <a class="card" href="aim-practice.html" aria-label="Aim Room — free aim practice for shooters and MOBAs" data-i18n-aria="card.aim.aria" data-module="aim" data-tone="622" data-url="aim-practice.html" style="--card-accent:var(--mech)">
                 <div class="card-head"><span class="card-code">M-01</span><span class="card-icon">◎</span></div>
                 <div class="card-body">
-                    <div class="card-title" data-i18n="card.aim.title">Aim Protocol</div>
-                    <div class="card-desc" data-i18n="card.aim.desc">Precision flicking and muscle memory micro-adjustments.</div>
+                    <div class="card-title" data-i18n="card.aim.title">Aim Room</div>
+                    <div class="card-desc" data-i18n="card.aim.desc">Free aim practice for shooters and MOBAs: flicking, moving targets and precise cursor control.</div>
                     <div class="card-best" data-best-for="aim" data-best-prefix="hps_" data-best-key="idx.best.hps" data-best-suffix="/s" data-best-decimals="1"></div>
                 </div>
-                <div class="card-foot"><span class="card-tag" data-i18n="card.aim.tag">High Intensity</span><span class="card-launch">LAUNCH →</span></div>
-            </div>
+                <div class="card-foot"><span class="card-tag" data-i18n="card.aim.tag">Aim Practice</span><span class="card-launch">LAUNCH →</span></div>
+            </a>
 
             <div class="card" data-module="time" data-tone="554" data-url="modulos/time_v3.html" style="--card-accent:#f97316">
                 <div class="card-head"><span class="card-code">M-02</span><span class="card-icon">⚡</span></div>
@@ -578,8 +578,8 @@
 <!-- Stats modal — opens on click of the B logo. Shows aggregated user stats
      across all modules. Empty state for new users. -->
 <!-- ═══ Player Card Modal — opens from the B logo ═══ -->
-<script src="assets/i18n.js"></script>
-<script src="assets/shared.js"></script>
+<script src="assets/i18n.js?v=2026.09.15"></script>
+<script src="assets/shared.js?v=2026.09.15"></script>
 <script src="assets/history.js"></script>
 <script src="assets/training-core.js"></script>
 <script src="assets/routine.js"></script>
@@ -664,7 +664,7 @@
     /* Bind card clicks + hover ticks with per-module tone */
     document.querySelectorAll('.card[data-url]').forEach(c => {
         const tone = parseFloat(c.dataset.tone) || undefined;
-        c.addEventListener('click', () => launch(c.dataset.url, tone));
+        c.addEventListener('click', (event) => { event.preventDefault(); launch(c.dataset.url, tone); });
         c.addEventListener('mouseenter', () => Snd.tick(tone));
     });
 
