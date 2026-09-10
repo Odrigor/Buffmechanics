@@ -1,0 +1,732 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BuffMechanics | Typing Speed</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' fill='%23dc2626'/%3E%3Ctext x='50%25' y='54%25' text-anchor='middle' dominant-baseline='middle' font-family='monospace' font-size='40' font-weight='700' fill='%23ffffff'%3EB%3C/text%3E%3Crect x='2' y='2' width='60' height='60' fill='none' stroke='%23ffffff' stroke-width='3'/%3E%3C/svg%3E">
+    <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="../assets/shared.css">
+    <style>
+        /* Typing Speed — deep red identity (#dc2626).
+           Mode-cards (15s / 30s / 60s), not tabs — duration is categorical:
+           sprint vs standard vs endurance test different abilities.
+           See MANIFIESTO.md §3.1 (mode-cards as documented exception). */
+        :root{
+            --accent:#dc2626;
+            --accent-dim:rgba(220,38,38,.12);
+            --gold:#eab308;
+        }
+        body{height:100vh;overflow:hidden;display:flex;align-items:center;justify-content:center;cursor:default}
+
+        /* Typing stage — visible during gameplay */
+        .stage{
+            display:none;
+            width:min(90vw, 920px);
+            flex-direction:column;
+            gap:24px;
+            align-items:stretch;
+        }
+        .stage.on{display:flex}
+
+        /* Module header (top bar) */
+        .stage-head{
+            display:flex;justify-content:space-between;align-items:flex-start;
+            padding:0 4px;
+        }
+        .sh-mod{font-family:'Space Mono',monospace;font-size:8px;letter-spacing:.16em;color:var(--t3);text-transform:uppercase}
+        .sh-mod b{color:var(--t2)}
+
+        /* Stats bar (above the words) */
+        .stats{
+            display:flex;justify-content:center;gap:48px;
+            padding:14px 0;
+            border-bottom:1px solid var(--bd);
+        }
+        .stat{display:flex;flex-direction:column;align-items:center;gap:2px;min-width:60px}
+        .stat-v{font-size:28px;font-weight:700;line-height:1;font-family:'Rajdhani',sans-serif}
+        .stat-v.accent{color:var(--accent)}
+        .stat-v.dim{color:var(--t2)}
+        .stat-l{
+            font-family:'Space Mono',monospace;
+            font-size:8px;color:var(--t3);
+            letter-spacing:.14em;text-transform:uppercase;
+        }
+
+        /* Word stream */
+        .stream-wrap{
+            position:relative;
+            font-family:'Space Mono',monospace;
+            font-size:28px;line-height:1.6;
+            min-height:148px;
+            padding:24px 16px;
+            background:var(--sf);
+            border:1px solid var(--bd);
+            overflow:hidden;
+        }
+        .stream{
+            display:flex;flex-wrap:wrap;gap:0 14px;
+            transition:transform .2s ease;
+        }
+        .word{
+            display:inline-flex;
+            color:var(--t3);
+            transition:color .15s;
+            white-space:nowrap;
+        }
+        .word.done{color:var(--t3)}            /* already past */
+        .word.done.bad{color:var(--miss)}      /* completed with errors */
+        .word.current{color:var(--t1)}         /* being typed now */
+        .word .ch{transition:color .1s, background .1s}
+        .word .ch.ok{color:var(--hit)}
+        .word .ch.bad{color:var(--miss);background:rgba(255,34,85,.12)}
+        .word .ch.cursor{
+            border-left:2px solid var(--accent);
+            margin-left:-2px;
+            animation:blink 1s infinite;
+        }
+        @keyframes blink{50%{border-color:transparent}}
+
+        /* Cover-up gradient at top/bottom of stream for the "scrolling" feel */
+        .stream-wrap::before,.stream-wrap::after{
+            content:'';position:absolute;left:0;right:0;height:24px;pointer-events:none;
+        }
+        .stream-wrap::before{top:0;background:linear-gradient(180deg,var(--sf),transparent)}
+        .stream-wrap::after{bottom:0;background:linear-gradient(0deg,var(--sf),transparent)}
+
+        /* Hidden input — captures keystrokes invisibly */
+        .input-capture{
+            position:absolute;left:-9999px;opacity:0;
+            width:1px;height:1px;
+        }
+
+        /* Status pill below stream */
+        .status-line{
+            display:flex;justify-content:center;align-items:center;gap:24px;
+            font-family:'Space Mono',monospace;font-size:10px;
+            color:var(--t2);letter-spacing:.14em;text-transform:uppercase;
+        }
+        .status-pill{
+            padding:3px 12px;border:1px solid var(--bd);
+            color:var(--t2);
+        }
+        .status-pill.live{color:var(--accent);border-color:var(--accent)}
+        .status-pill.waiting{color:var(--t3)}
+
+        /* Setup mode-cards (3 cards: 15s / 30s / 60s) */
+        .mode-cards{display:flex;gap:10px;max-width:560px;width:100%;padding:0 20px;margin:18px 0}
+        .mcard{flex:1;background:var(--sf);border:1px solid var(--bd);padding:22px 14px;cursor:pointer;transition:all .2s;text-align:center}
+        .mcard:hover{border-color:var(--t2);transform:translateY(-3px)}
+        .mcard .micon{font-size:26px;margin-bottom:8px;font-family:'Space Mono',monospace;font-weight:700;color:var(--t2)}
+        .mcard .mname{font-size:15px;font-weight:700;letter-spacing:.05em;margin-bottom:4px}
+        .mcard .mdesc{font-family:'Space Mono',monospace;font-size:9px;color:var(--t2);line-height:1.6}
+        .mcard.sel{border-color:var(--accent);background:var(--accent-dim)}
+        .mcard.sel .micon{color:var(--accent)}
+
+        .setup .gobtn{max-width:320px;padding:14px 64px;width:auto}
+
+        /* Results — extended layout with WPM curve */
+        .wpm-chart{
+            height:90px;margin:18px 0;
+            display:flex;align-items:flex-end;gap:2px;
+            padding:0 4px;border-bottom:1px solid var(--bd);padding-bottom:18px;
+            position:relative;
+        }
+        .wpm-bar{
+            flex:1;background:var(--accent);opacity:.6;
+            min-height:3px;border-radius:1px;
+            transition:height .4s ease, opacity .15s;
+        }
+        .wpm-bar:hover{opacity:1}
+        .chart-label{
+            position:absolute;bottom:2px;
+            font-family:'Space Mono',monospace;
+            font-size:8px;color:var(--t3);letter-spacing:.1em;
+        }
+        .chart-label.left{left:4px}
+        .chart-label.right{right:4px}
+    </style>
+<link rel="stylesheet" href="../assets/experience.css">
+<link rel="stylesheet" href="../assets/workspace.css">
+</head>
+<body>
+<!-- ═══ STAGE (gameplay) ═══ -->
+<div class="stage" id="stage">
+    <div class="stage-head">
+        <div class="sh-mod">MODULE M-07 · <b>TYPING SPEED</b></div>
+        <div class="sh-mod" id="sh-duration">— SECONDS</div>
+    </div>
+
+    <div class="stats">
+        <div class="stat">
+            <div class="stat-v accent" id="s-wpm">0</div>
+            <div class="stat-l" data-i18n="ty.wpm">WPM</div>
+        </div>
+        <div class="stat">
+            <div class="stat-v" id="s-acc">100%</div>
+            <div class="stat-l" data-i18n="ty.accuracy">Accuracy</div>
+        </div>
+        <div class="stat">
+            <div class="stat-v dim" id="s-time">60</div>
+            <div class="stat-l" data-i18n="ty.seconds">Seconds</div>
+        </div>
+        <div class="stat">
+            <div class="stat-v dim" id="s-err">0</div>
+            <div class="stat-l">Errors</div>
+        </div>
+    </div>
+
+    <div class="stream-wrap">
+        <div class="stream" id="stream"></div>
+    </div>
+
+    <div class="status-line">
+        <div class="status-pill waiting" id="status-pill" data-i18n="ty.typetobegin">Type to begin</div>
+    </div>
+
+    <input type="text" class="input-capture" id="capture" autocomplete="off" autocapitalize="off" spellcheck="false">
+</div>
+
+<!-- ═══ SETUP ═══ -->
+<div class="setup" id="setup">
+    <button class="snd-toggle" id="snd-btn" onclick="Snd.toggle()">♪ ON</button>
+    <div class="setup-logo">TYP</div>
+    <div class="stitle">TYPING <em>SPEED</em></div>
+    <div class="ssub" data-i18n="ty.sub">Competitive mindset · words per minute</div>
+
+    <div class="mode-cards">
+        <div class="mcard" id="mc-15" onclick="UI.pick(15)">
+            <div class="micon">15</div>
+            <div class="mname" data-i18n="ty.sprint">SPRINT</div>
+            <div class="mdesc" data-i18n-html="ty.sprint.desc">15 seconds<br>Burst speed</div>
+        </div>
+        <div class="mcard" id="mc-30" onclick="UI.pick(30)">
+            <div class="micon">30</div>
+            <div class="mname" data-i18n="ty.standard">STANDARD</div>
+            <div class="mdesc" data-i18n-html="ty.standard.desc">30 seconds<br>Balanced</div>
+        </div>
+        <div class="mcard sel" id="mc-60" onclick="UI.pick(60)">
+            <div class="micon">60</div>
+            <div class="mname" data-i18n="ty.endurance">ENDURANCE</div>
+            <div class="mdesc" data-i18n-html="ty.endurance.desc">60 seconds<br>Sustained focus</div>
+        </div>
+    </div>
+
+    <button class="gobtn" onclick="Game.start()" data-i18n="m.start.plain">START</button>
+    <button class="gobtn-back" onmouseenter="Snd.tick(660)" onclick="BM.backToHome()" data-i18n="m.back">← BACK TO MENU</button>
+    <div class="hint" data-i18n="ty.hint">Type each word, space commits. Wrong letters highlight red. Don't look at your hands.</div>
+</div>
+
+<!-- ═══ RESULTS ═══ -->
+<div class="res hide" id="res">
+    <div class="rcard">
+        <div style="text-align:center">
+            <div class="mono" style="font-size:8px;letter-spacing:.14em;color:var(--t2);margin-bottom:4px" id="r-mode">SESSION COMPLETE</div>
+            <div style="font-size:44px;font-weight:700;color:var(--accent)" id="r-wpm">0</div>
+            <div class="mono" style="font-size:9px;color:var(--t2);margin-top:2px" data-i18n="ty.netwpm">WORDS PER MINUTE (NET)</div>
+            <div id="r-new-best"></div>
+        </div>
+
+        <div class="wpm-chart" id="wpm-chart">
+            <div class="chart-label left" data-i18n="ty.wpmovertime">WPM over time</div>
+            <div class="chart-label right" id="chart-peak" data-i18n="ty.peakdash">peak —</div>
+        </div>
+
+        <div class="rgrid">
+            <div class="rcell"><div class="rv" id="r-raw">0</div><div class="rl" data-i18n="ty.rawwpm">Raw WPM</div></div>
+            <div class="rcell"><div class="rv" id="r-acc">100%</div><div class="rl" data-i18n="ty.accuracy">Accuracy</div></div>
+            <div class="rcell"><div class="rv" style="color:var(--gold)" id="r-cons">0%</div><div class="rl" data-i18n="ty.consistency">Consistency</div></div>
+            <div class="rcell"><div class="rv" id="r-words">0</div><div class="rl" data-i18n="ty.words">Words</div></div>
+        </div>
+
+        <div class="rbtns">
+            <button class="rb-s" onclick="location.href='../index.html'" data-i18n="m.exit">EXIT</button>
+            <button class="rb-s" onclick="Game.toSetup()" data-i18n="m.menu">MENU</button>
+            <button class="rb-p" onclick="Game.retry()" data-i18n="m.retry">RETRY</button>
+        </div>
+    </div>
+</div>
+
+<script src="../assets/i18n.js"></script>
+<script src="../assets/shared.js"></script>
+<script src="../assets/history.js"></script>
+<script src="../assets/training-core.js"></script>
+<script src="../assets/routine.js"></script>
+<script src="../assets/experience.js"></script>
+<script>
+const MODULE = 'typing';
+
+// ═══ WORDLIST ═══
+// Competitive mindset vocabulary. Mix of short (3-5 letters) for speed,
+// medium (6-8) for rhythm, and longer (9-12) for endurance.
+// Curated to match the BuffMechanics ethos: focus, drill, react, execute.
+const WORDS = [
+    // Short power words (3-5 letters) — fast, percussive
+    'aim','win','grit','edge','grip','core','will','hold','fire','snap',
+    'lock','seek','hunt','rise','flow','calm','sharp','quick','focus','drill',
+    'react','train','steady','clutch','clean','swift','fight','grind','climb','prove',
+    'crush','elite','frame','pace','peak','pure','reach','spike','start','still',
+    // Mid-range (6-8 letters) — flow, technique
+    'target','sniper','timing','smooth','precise','tactic','tempo','volume','strike','adjust',
+    'control','correct','engaged','focused','intense','rhythm','sharpen','silence','steady','tracking',
+    'practice','sustain','optimize','overcome','endurance','momentum','progress','sharpest','dominant','pristine',
+    // Mindset / philosophy (longer, deliberate)
+    'discipline','consistent','deliberate','adaptation','commitment','breakthrough','calibration',
+    'concentration','determination','mastery','milestone','potential','precision','protocol','resilience',
+    'systematic','threshold','unwavering','velocity','warrior','willpower','dedication','execution',
+    // Action verbs
+    'execute','perform','deliver','sustain','transcend','recover','rebuild','reload','refine','renew',
+    'sharpen','simplify','outlast','outpace','outwork','dominate','navigate','calibrate','accelerate','optimize',
+    // Gaming-adjacent
+    'flick','track','clutch','rotation','reposition','headshot','accuracy','reaction','reflex','reset',
+    'aim','crosshair','dexterity','footwork','peek','strafe','recoil','spray','tap','burst',
+    // Competitive nouns
+    'ranking','podium','victory','champion','contender','underdog','rival','arena','final','medal',
+    'record','score','streak','combo','grade','tier','metric','baseline','benchmark','goal',
+    // Mental states
+    'alert','aware','clear','frosty','locked','primed','ready','sharp','tuned','wired',
+    'breathe','center','ground','present','steady','tense','release','reset','flow','glow'
+];
+
+// ═══ UI ═══
+const UI = {
+    duration: 60,
+    pick(d){
+        this.duration = d;
+        [15, 30, 60].forEach(k => {
+            document.getElementById('mc-' + k).classList.toggle('sel', k === d);
+        });
+        Snd.tick(330);
+    }
+};
+
+// ═══ GAME ═══
+//
+// State model:
+//   words[]         array of word strings shown in the stream
+//   typed[]         array parallel to words[]; what the user actually typed
+//                   for that word (kept for accuracy/error counting)
+//   wordIdx         index of the word being typed right now
+//   currentInput    string of what the user has typed for the current word
+//                   (not yet committed — space or end of session commits it)
+//
+// Lifecycle:
+//   start()    → setup, but timer is NOT yet running. First keystroke arms it.
+//   onKey()    → first letter arms the timer; spaces commit words; etc.
+//   tick()     → 1Hz interval, updates time + WPM sample for the chart
+//   end()      → show results
+
+const Game = {
+    duration: 60,
+    timeLeft: 60,
+    active: false,
+    paused: false,
+    armed: false,         // first keystroke armed the timer?
+    qs: null,
+
+    // Stream state
+    words: [],            // strings shown
+    typed: [],            // what user typed for each completed word
+    wordIdx: 0,
+    currentInput: '',
+
+    // Totals (accumulated, never reset mid-session)
+    correctChars: 0,      // characters that matched expected, ever
+    wrongChars: 0,        // characters typed but didn't match
+    extraChars: 0,        // user typed beyond word length (still counts toward raw)
+    completedWords: 0,    // words committed with space
+    perfectWords: 0,      // words committed with zero errors
+
+    // Per-second WPM samples for the chart + consistency calc
+    wpmSamples: [],
+
+    // Timers
+    timerI: null,
+
+    start(){
+        Snd.init();
+        this.duration = UI.duration;
+        this.timeLeft = this.duration;
+        this.active = true;
+        this.paused = false;
+        this.armed = false;
+        this.words = [];
+        this.typed = [];
+        this.wordIdx = 0;
+        this.currentInput = '';
+        this.correctChars = 0;this.omittedChars=0;
+        this.wrongChars = 0;
+        this.extraChars = 0;
+        this.completedWords = 0;
+        this.perfectWords = 0;
+        this.wpmSamples = [];
+
+        // Populate initial words (generous buffer)
+        for(let i = 0; i < 80; i++) this.words.push(this.nextWord());
+
+        document.getElementById('setup').classList.add('hide');
+        document.getElementById('res').classList.add('hide');
+        document.getElementById('stage').classList.add('on');
+        document.getElementById('sh-duration').textContent = this.duration + ' SECONDS';
+
+        const sp = document.getElementById('status-pill');
+        sp.textContent = I18N.t('ty.typetobegin');
+        sp.className = 'status-pill waiting';
+
+        this.updateStats();
+        this.renderStream();
+        // Focus the hidden capture so keys flow in
+        const capture = document.getElementById('capture');
+        capture.value = '';
+        capture.focus();
+
+        if(this.qs && this.qs.btn) this.qs.btn.classList.add('on');
+    },
+
+    retry(){ this.start(); },
+
+    toSetup(){
+        document.getElementById('res').classList.add('hide');
+        document.getElementById('stage').classList.remove('on');
+        document.getElementById('setup').classList.remove('hide');
+        if(this.qs && this.qs.btn) this.qs.btn.classList.remove('on');
+        this.active = false;
+    },
+
+    // ── Pause / Resume ──
+    // Anti-abuse: pausing freezes time AND discards the current word's
+    // partial input. On resume, you're handed a fresh word from the same
+    // position. Cannot pause to "think about" a difficult word.
+    pause(){
+        if(!this.active || this.paused) return;
+        this.paused = true;
+        this.scheduler.clear(this.timerI);
+        // Don't lose progress — completed words stay counted.
+        // But discard the in-flight currentInput so it's not committed unfairly.
+        this.currentInput = '';
+        document.getElementById('capture').blur();
+    },
+    resume(){
+        if(!this.active || !this.paused) return;
+        this.paused = false;
+        // If timer was armed, restart its tick. Otherwise wait for first key.
+        if(this.armed && this.timeLeft > 0){
+            this.startTimer();
+        }
+        this.renderStream();
+        document.getElementById('capture').focus();
+    },
+    exit(){
+        this.active = false;
+        this.paused = false;
+        this.scheduler.clear(this.timerI);
+    },
+
+    // ── Word generation — no immediate repeats ──
+    _lastWord: '',
+    nextWord(){
+        let w;
+        do { w = WORDS[Math.floor(Math.random() * WORDS.length)]; }
+        while(w === this._lastWord);
+        this._lastWord = w;
+        return w;
+    },
+
+    // ── Timer ──
+    startTimer(){
+        this.scheduler.clear(this.timerI);
+        let sinceLastSample = 0;
+        this.timerI = this.scheduler.setInterval(() => {
+            if(!this.active || this.paused) return;
+            this.timeLeft=Math.max(0,Math.ceil(this.sessionDuration-this.clock.now()/1000-(this.timePenalty||0)));
+            sinceLastSample++;
+            // Sample WPM every second for the chart and consistency calc
+            this.wpmSamples.push(this.calcWpm().net);
+            this.updateStats();
+            if(this.timeLeft <= 0) this.end();
+        }, 1000);
+    },
+
+    // ── Input handling ──
+    // Called from the keydown listener at the bottom of the file.
+    onKey(e){
+        if(!this.active || this.paused) return;
+        const key = e.key;
+
+        // First keystroke arms the timer
+        if(!this.armed && key.length === 1 && /\S/.test(key)){
+            this.armed = true;
+            this.clock.reset();
+            this.startTimer();
+            this.scheduler.setTimeout(()=>this.end(),this.duration*1000);
+            const sp = document.getElementById('status-pill');
+            sp.textContent = I18N.t('ty.live');
+            sp.className = 'status-pill live';
+        }
+
+        if(key === 'Backspace'){
+            // Backspace only affects the current word (cannot go back to prior words)
+            if(this.currentInput.length > 0){
+                this.currentInput = this.currentInput.slice(0, -1);
+                this.updateStats();
+                e.preventDefault();
+                this.renderStream();
+            }
+            return;
+        }
+
+        if(key === ' '){
+            // Commit current word
+            e.preventDefault();
+            if(this.currentInput.length === 0) return;  // ignore lone spaces
+            this.commitWord();
+            return;
+        }
+
+        if(key.length === 1 && /\S/.test(key)){
+            // Regular printable character. Add to current input.
+            const target = this.words[this.wordIdx] || '';
+            const pos = this.currentInput.length;
+            if(pos < target.length){
+                if(key === target[pos]) this.correctChars++;
+                else                    this.wrongChars++;
+            } else {
+                // Typed past the end of the word — counts as extra (errors against raw count)
+                this.extraChars++;
+                this.wrongChars++;
+            }
+            this.currentInput += key;
+            this.renderStream();
+            this.updateStats();
+            // Subtle click on every keystroke — uses tick at a fixed neutral pitch
+            // so it doesn't compete with the module-identity tones used elsewhere.
+            // Skipped if too rapid (fast typers would generate audio fatigue).
+        }
+    },
+
+    commitWord(){
+        const target = this.words[this.wordIdx];
+        const typed = this.currentInput;
+        this.typed[this.wordIdx] = typed;
+        this.omittedChars+=Math.max(0,target.length-typed.length);
+        this.completedWords++;
+        if(typed === target) this.perfectWords++;
+
+        this.wordIdx++;
+        this.currentInput = '';
+        // Generate more words if we're running out
+        if(this.words.length - this.wordIdx < 30){
+            for(let i = 0; i < 30; i++) this.words.push(this.nextWord());
+        }
+        Snd.tick(this.completedWords % 10 === 0 ? 660 : 440);
+        this.renderStream();
+    },
+
+    // ── Rendering ──
+    // We render up to ~50 words around the current position. The "scroll"
+    // effect comes from CSS transform on the stream container, shifting it
+    // vertically as the user advances past the first visible line.
+    renderStream(){
+        const stream = document.getElementById('stream');
+        stream.innerHTML = '';
+
+        // Render a window of words: a few before the current, then forward.
+        // Showing a couple of completed words gives the user spatial context.
+        const start = Math.max(0, this.wordIdx - 4);
+        const end = Math.min(this.words.length, this.wordIdx + 40);
+
+        for(let i = start; i < end; i++){
+            const w = this.words[i];
+            const wel = document.createElement('span');
+            wel.className = 'word';
+
+            if(i < this.wordIdx){
+                // Already committed
+                wel.classList.add('done');
+                const t = this.typed[i] || '';
+                if(t !== w) wel.classList.add('bad');
+                // Show the original target word (not what user typed) so the
+                // visual stream is stable on review.
+                [...w].forEach(c => {
+                    const cs = document.createElement('span');
+                    cs.className = 'ch';
+                    cs.textContent = c;
+                    wel.appendChild(cs);
+                });
+            } else if(i === this.wordIdx){
+                // Currently being typed
+                wel.classList.add('current');
+                const target = w;
+                const input = this.currentInput;
+                for(let j = 0; j < Math.max(target.length, input.length); j++){
+                    const cs = document.createElement('span');
+                    cs.className = 'ch';
+                    if(j < input.length){
+                        // User typed this position
+                        if(j < target.length){
+                            cs.textContent = target[j];
+                            cs.classList.add(input[j] === target[j] ? 'ok' : 'bad');
+                        } else {
+                            // Typed beyond word — show what they typed as bad
+                            cs.textContent = input[j];
+                            cs.classList.add('bad');
+                        }
+                    } else {
+                        cs.textContent = target[j];
+                        if(j === input.length) cs.classList.add('cursor');
+                    }
+                    wel.appendChild(cs);
+                }
+            } else {
+                // Upcoming word — just plain text
+                [...w].forEach(c => {
+                    const cs = document.createElement('span');
+                    cs.className = 'ch';
+                    cs.textContent = c;
+                    wel.appendChild(cs);
+                });
+            }
+            stream.appendChild(wel);
+        }
+    },
+
+    // ── Metrics ──
+    // WPM formula: standard is (chars / 5) / minutes.
+    //   Raw   = all typed chars (correct + wrong) / 5 / min
+    //   Net   = only correct chars / 5 / min  (penalizes errors)
+    //   Plus we add +1 per completed word for the space (counts as a char).
+    calcWpm(){
+        const elapsedSec = this.clock.now()/1000;
+        if(elapsedSec <= 0) return { raw: 0, net: 0 };
+        const minutes = elapsedSec / 60;
+        const totalChars = this.correctChars + this.wrongChars + this.completedWords;  // +1 per word for the space
+        let correctTotal = this.perfectWords;
+        for(let i=0;i<=this.wordIdx;i++){
+            const retained=i===this.wordIdx?this.currentInput:(this.typed[i]||'');
+            const target=this.words[i]||'';
+            for(let j=0;j<retained.length;j++)if(retained[j]===target[j])correctTotal++;
+        }  // only perfect words contribute spaces to "correct"
+        return {
+            raw: Math.round((totalChars / 5) / minutes),
+            net: Math.round((correctTotal / 5) / minutes)
+        };
+    },
+
+    updateStats(){
+        const { raw, net } = this.calcWpm();
+        document.getElementById('s-wpm').textContent = net;
+        const totalChars = this.correctChars + this.wrongChars + (this.omittedChars||0);
+        const acc = totalChars > 0 ? Math.round(this.correctChars / totalChars * 100) : 100;
+        document.getElementById('s-acc').textContent = acc + '%';
+        document.getElementById('s-time').textContent = this.timeLeft;
+        document.getElementById('s-err').textContent = this.wrongChars+(this.omittedChars||0);
+    },
+
+    // ── End / results ──
+    end(){
+        this.active = false;
+        this.scheduler.clear(this.timerI);
+        document.getElementById('stage').classList.remove('on');
+        if(this.qs && this.qs.btn) this.qs.btn.classList.remove('on');
+
+        const { raw, net } = this.calcWpm();
+        const totalChars = this.correctChars + this.wrongChars + (this.omittedChars||0);
+        const acc = totalChars > 0 ? Math.round(this.correctChars / totalChars * 100) : 100;
+
+        // Consistency: 1 - (stddev / mean) of the per-second WPM samples,
+        // expressed as a percentage. Higher = more consistent pace.
+        let consistency = 0;
+        if(this.wpmSamples.length > 1){
+            const mean = this.wpmSamples.reduce((a, b) => a + b, 0) / this.wpmSamples.length;
+            if(mean > 0){
+                const variance = this.wpmSamples.reduce((acc, v) => acc + (v - mean) ** 2, 0) / this.wpmSamples.length;
+                const std = Math.sqrt(variance);
+                consistency = Math.max(0, Math.min(100, Math.round((1 - std / mean) * 100)));
+            }
+        }
+
+        // Render WPM curve
+        const chart = document.getElementById('wpm-chart');
+        // Clean up: keep the chart-label children, remove old bars
+        chart.querySelectorAll('.wpm-bar').forEach(b => b.remove());
+        const maxWpm = Math.max(...this.wpmSamples, 1);
+        const peak = Math.round(Math.max(...this.wpmSamples, 0));
+        document.getElementById('chart-peak').textContent = I18N.t('ty.peak') + ' ' + peak;
+        this.wpmSamples.forEach(v => {
+            const bar = document.createElement('div');
+            bar.className = 'wpm-bar';
+            const h = (v / maxWpm) * 100;
+            bar.style.height = '0%';
+            chart.appendChild(bar);
+            this.scheduler.requestAnimationFrame(() => { bar.style.height = h + '%'; });
+        });
+
+        document.getElementById('r-mode').textContent = this.duration + ' ' + I18N.t('ty.seconds.word') + ' — ' + I18N.t('m.complete');
+        document.getElementById('r-wpm').textContent = net;
+        document.getElementById('r-raw').textContent = raw;
+        document.getElementById('r-acc').textContent = acc + '%';
+        document.getElementById('r-cons').textContent = consistency + '%';
+        document.getElementById('r-words').textContent = this.completedWords;
+
+        Store.saveSession(MODULE, {
+            duration: this.duration,
+            wpm: net,
+            wpmRaw: raw,
+            acc,
+            consistency,
+            words: this.completedWords
+        });
+        // Per-duration best (different durations test different skills,
+        // so we don't try to compare them)
+        const best = Store.saveBest(MODULE, 'wpm_' + this.duration, net, true);
+        document.getElementById('r-new-best').innerHTML =
+            best.isNew ? '<span class="new-best">'+I18N.t('m.newbest')+'</span>' : '';
+
+        document.getElementById('res').classList.remove('hide');
+    }
+};
+
+// ═══ INIT ═══
+
+if(!Snd.on) document.getElementById('snd-btn').textContent = '♪ OFF';
+
+// Mode-card hover ticks — module tone (330 Hz, E4, extending the MECH scale below apm)
+document.getElementById('mc-15').addEventListener('mouseenter', () => Snd.tick(330));
+document.getElementById('mc-30').addEventListener('mouseenter', () => Snd.tick(330));
+document.getElementById('mc-60').addEventListener('mouseenter', () => Snd.tick(330));
+
+// Keep the capture input focused so keystrokes always flow in.
+// Without this, clicking anywhere on the stage would lose focus and
+// subsequent keystrokes would do nothing.
+document.getElementById('stage').addEventListener('click', () => {
+    if(Game.active && !Game.paused) document.getElementById('capture').focus();
+});
+
+// Main key handler — bound to window so we don't depend on which element has focus
+window.addEventListener('keydown', (e) => {
+    if(!Game.active || e.repeat || e.target.closest('button,[role=button],a[href]')) return;
+    if(Game.qs && Game.qs.isOpen) return;   // switcher overlay swallows keys
+    // Don't intercept browser shortcuts (Ctrl/Cmd combos)
+    if(e.ctrlKey || e.metaKey || e.altKey) return;
+    Game.onKey(e);
+});
+
+// Re-render dynamic text on language change. Static data-i18n nodes (mode
+// cards, hint, "Type to begin", "peak —") update automatically; this refreshes
+// the live status pill if a session is running.
+window.addEventListener('langchange', () => {
+    const sp = document.getElementById('status-pill');
+    if(sp && Game.active && !Game.paused) sp.textContent = I18N.t('ty.live');
+});
+
+// Quick switcher — pause + module nav
+BM.attachTraining({module:MODULE,game:Game,ui:UI,start:'start',finish:'end'});
+Game.qs = BM.mountQuickSwitcher({
+    current: MODULE,
+    onPause:  () => Game.pause(),
+    onResume: () => Game.resume(),
+    onExit:   () => Game.exit()
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,271 @@
+        .stats-modal{
+            position:fixed;inset:0;z-index:300;
+            background:rgba(6,6,8,0);backdrop-filter:blur(0);
+            display:flex;align-items:flex-start;justify-content:center;
+            padding:24px;opacity:0;pointer-events:none;
+            transition:all .3s;overflow-y:auto;
+        }
+        .stats-modal.on{
+            background:rgba(6,6,8,.92);backdrop-filter:blur(10px);
+            opacity:1;pointer-events:all;
+        }
+        /* Wrapper holds the card + the customization sidebar side-by-side */
+        .pc-wrap{
+            display:flex;gap:18px;align-items:flex-start;
+            max-width:1080px;width:100%;margin:auto;
+            transform:translateY(20px) scale(.97);opacity:0;
+            transition:all .35s cubic-bezier(.16,1,.3,1);
+        }
+        .stats-modal.on .pc-wrap{transform:translateY(0) scale(1);opacity:1}
+
+        /* ── The player card — this is what gets exported ── */
+        #player-card{
+            flex:1;min-width:0;
+            --pc-bg:#0a0a10;
+            --pc-bg2:#13131a;
+            --pc-text:#edeef2;
+            --pc-muted:#9a9ab0;
+            --pc-accent:#a855f7;
+            --pc-border:rgba(255,255,255,.08);
+            --pc-pattern:0;             /* 0..3 — set via dataset */
+            --pc-font-display:'Rajdhani',sans-serif;
+            --pc-font-mono:'Space Mono',monospace;
+            position:relative;overflow:hidden;
+            background:var(--pc-bg);color:var(--pc-text);
+            border:1px solid var(--pc-border);
+            font-family:var(--pc-font-display);
+            transition:background .25s,color .25s,border-color .25s;
+        }
+        /* Decorative background patterns — overlaid via a pseudo-element so
+           changing them doesn't touch any content node. */
+        #player-card::before{
+            content:'';position:absolute;inset:0;pointer-events:none;
+            opacity:.5;mix-blend-mode:overlay;
+        }
+        #player-card[data-pattern="grid"]::before{
+            background-image:
+                linear-gradient(var(--pc-border) 1px,transparent 1px),
+                linear-gradient(90deg,var(--pc-border) 1px,transparent 1px);
+            background-size:32px 32px;
+        }
+        #player-card[data-pattern="diag"]::before{
+            background-image:repeating-linear-gradient(45deg,var(--pc-border),var(--pc-border) 1px,transparent 1px,transparent 14px);
+        }
+        #player-card[data-pattern="noise"]::before{
+            background-image:radial-gradient(circle at 25% 30%,var(--pc-accent) 0,transparent 30%),
+                             radial-gradient(circle at 75% 70%,var(--pc-accent) 0,transparent 30%);
+            opacity:.05;
+        }
+        #player-card[data-pattern="solid"]::before{background:none}
+
+        /* Card header — the "letterhead" */
+        .pc-head{
+            position:relative;padding:24px 28px 18px;
+            border-bottom:1px solid var(--pc-border);
+            display:flex;align-items:flex-start;justify-content:space-between;gap:20px;
+        }
+        .pc-head-mark{
+            font-family:var(--pc-font-mono);font-size:10px;letter-spacing:.24em;
+            color:var(--pc-muted);text-transform:uppercase;font-weight:700;
+            margin-bottom:6px;
+        }
+        .pc-head-title{
+            font-size:32px;font-weight:700;line-height:1;letter-spacing:.04em;
+            text-transform:uppercase;color:var(--pc-text);
+        }
+        .pc-head-title em{color:var(--pc-accent);font-style:normal}
+        .pc-head-sub{
+            font-family:var(--pc-font-mono);font-size:10px;letter-spacing:.16em;
+            color:var(--pc-muted);text-transform:uppercase;margin-top:8px;
+        }
+        .pc-head-id{
+            font-family:var(--pc-font-mono);font-size:9px;letter-spacing:.18em;
+            color:var(--pc-muted);text-align:right;line-height:1.6;text-transform:uppercase;
+        }
+        .pc-head-id b{color:var(--pc-text);font-weight:700}
+
+        /* Sections inside the card */
+        .pc-section{padding:18px 28px}
+        .pc-section + .pc-section{border-top:1px solid var(--pc-border)}
+        .pc-section-label{
+            font-family:var(--pc-font-mono);font-size:9px;font-weight:700;
+            letter-spacing:.22em;color:var(--pc-accent);text-transform:uppercase;
+            margin-bottom:14px;display:flex;align-items:center;gap:10px;
+        }
+        .pc-section-label::after{
+            content:'';flex:1;height:1px;background:var(--pc-border);
+        }
+
+        /* Top stats: 4 big numbers in a row */
+        .pc-stats-row{
+            display:grid;grid-template-columns:repeat(4,1fr);gap:14px;
+        }
+        .pc-stat{text-align:center;padding:8px 4px}
+        .pc-stat-val{
+            font-size:28px;font-weight:700;line-height:1;color:var(--pc-text);
+            letter-spacing:-.01em;
+        }
+        .pc-stat-val.acc{color:var(--pc-accent)}
+        .pc-stat-lbl{
+            font-family:var(--pc-font-mono);font-size:8px;font-weight:700;
+            letter-spacing:.18em;color:var(--pc-muted);text-transform:uppercase;
+            margin-top:8px;line-height:1.3;
+        }
+
+        /* Records grid — 2 columns of compact record rows */
+        .pc-records{
+            display:grid;grid-template-columns:1fr 1fr;gap:8px 24px;
+        }
+        .pc-record{
+            display:flex;align-items:center;justify-content:space-between;
+            padding:6px 0;border-bottom:1px dotted var(--pc-border);
+            gap:12px;
+        }
+        .pc-record:last-child{border-bottom:none}
+        .pc-record-name{
+            font-family:var(--pc-font-mono);font-size:9.5px;letter-spacing:.12em;
+            color:var(--pc-muted);text-transform:uppercase;font-weight:400;
+            white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+        }
+        .pc-record-name b{color:var(--pc-text);font-weight:700;margin-right:4px}
+        .pc-record-val{
+            font-size:15px;font-weight:700;color:var(--pc-text);
+            line-height:1;letter-spacing:.01em;flex-shrink:0;
+        }
+        .pc-record-val small{
+            font-family:var(--pc-font-mono);font-size:9px;color:var(--pc-muted);
+            font-weight:400;margin-left:2px;letter-spacing:.04em;
+        }
+
+        /* Empty state — centered, sober */
+        .pc-empty{
+            text-align:center;padding:48px 24px;
+            color:var(--pc-muted);font-size:11px;letter-spacing:.14em;
+            text-transform:uppercase;line-height:1.9;
+            font-family:var(--pc-font-mono);
+        }
+        .pc-empty b{color:var(--pc-text);font-weight:700;font-size:13px}
+
+        /* Footer: nickname + watermark */
+        .pc-foot{
+            padding:18px 28px;border-top:1px solid var(--pc-border);
+            display:flex;align-items:center;justify-content:space-between;gap:16px;
+        }
+        .pc-nick{
+            flex:1;font-size:18px;font-weight:700;letter-spacing:.04em;
+            color:var(--pc-text);text-align:center;line-height:1;
+            font-family:var(--pc-font-display);
+        }
+        .pc-nick:empty::before{
+            content:'YOUR · TAG';opacity:.3;letter-spacing:.2em;
+        }
+        .pc-watermark{
+            font-family:var(--pc-font-mono);font-size:8px;font-weight:700;
+            letter-spacing:.2em;color:var(--pc-muted);text-transform:uppercase;
+            opacity:.7;
+        }
+
+        /* ── Customization sidebar ── */
+        .pc-controls{
+            width:280px;flex-shrink:0;
+            background:var(--sf);border:1px solid var(--bd);
+            font-family:'Space Mono',monospace;
+        }
+        @media (max-width:900px){
+            .pc-wrap{flex-direction:column}
+            .pc-controls{width:100%}
+        }
+        .pc-controls-head{
+            padding:12px 16px;border-bottom:1px solid var(--bd);
+            display:flex;align-items:center;justify-content:space-between;
+            font-size:10px;letter-spacing:.18em;color:#c8c8d4;text-transform:uppercase;font-weight:700;
+        }
+        .pc-controls-close{
+            background:none;border:1px solid var(--bd);color:#c8c8d4;
+            font-family:inherit;font-size:9px;font-weight:700;padding:3px 10px;
+            cursor:pointer;letter-spacing:.12em;transition:all .15s;
+        }
+        .pc-controls-close:hover{color:#fff;border-color:#c8c8d4}
+        .pc-controls-body{padding:14px 16px;max-height:78vh;overflow-y:auto}
+
+        /* A control group: header + collapsible body */
+        .pc-group{margin-bottom:14px}
+        .pc-group:last-child{margin-bottom:0}
+        .pc-group-head{
+            font-size:9px;letter-spacing:.18em;color:var(--t3);text-transform:uppercase;
+            margin-bottom:8px;font-weight:700;
+        }
+        /* Nickname input */
+        .pc-nick-input{
+            width:100%;background:var(--bg);border:1px solid var(--bd);color:var(--t1);
+            font-family:'Rajdhani',sans-serif;font-size:15px;font-weight:700;
+            padding:8px 10px;letter-spacing:.04em;text-align:center;
+            transition:border-color .15s;
+        }
+        .pc-nick-input:focus{outline:none;border-color:var(--mech)}
+        .pc-nick-count{
+            font-size:8px;color:var(--t3);letter-spacing:.12em;text-align:right;
+            margin-top:4px;text-transform:uppercase;
+        }
+
+        /* Preset swatches — small clickable squares */
+        .pc-swatches{display:grid;grid-template-columns:repeat(6,1fr);gap:5px}
+        .pc-swatch{
+            aspect-ratio:1;border:1px solid var(--bd);cursor:pointer;
+            transition:transform .15s,border-color .15s;position:relative;
+        }
+        .pc-swatch:hover{transform:scale(1.1)}
+        .pc-swatch.on{border-color:var(--t1);transform:scale(1.1)}
+        .pc-swatch.on::after{
+            content:'';position:absolute;inset:2px;border:1px solid rgba(255,255,255,.7);
+        }
+
+        /* Color picker row */
+        .pc-color-row{
+            display:flex;align-items:center;gap:8px;
+            font-size:9px;letter-spacing:.1em;color:var(--t2);text-transform:uppercase;
+        }
+        .pc-color-row + .pc-color-row{margin-top:6px}
+        .pc-color-row label{flex:1;font-weight:700}
+        .pc-color-row input[type=color]{
+            width:32px;height:24px;border:1px solid var(--bd);background:none;
+            cursor:pointer;padding:0;
+        }
+        .pc-color-row input[type=color]::-webkit-color-swatch-wrapper{padding:0}
+        .pc-color-row input[type=color]::-webkit-color-swatch{border:none}
+
+        /* Pattern + font selector pills */
+        .pc-pills{display:flex;flex-wrap:wrap;gap:4px}
+        .pc-pill{
+            flex:1;min-width:0;background:none;border:1px solid var(--bd);color:var(--t2);
+            font-family:inherit;font-size:9px;letter-spacing:.1em;text-transform:uppercase;
+            padding:6px 8px;cursor:pointer;transition:all .15s;font-weight:700;
+            white-space:nowrap;text-overflow:ellipsis;overflow:hidden;
+        }
+        .pc-pill:hover{color:var(--t1);border-color:var(--t2)}
+        .pc-pill.on{color:var(--t1);border-color:var(--mech);background:rgba(239,68,68,.08)}
+
+        /* Action row at the bottom */
+        .pc-actions{
+            margin-top:14px;padding-top:14px;border-top:1px solid var(--bd);
+            display:flex;flex-direction:column;gap:6px;
+        }
+        .pc-btn{
+            background:none;border:1px solid var(--bd);color:var(--t1);
+            font-family:inherit;font-size:10px;letter-spacing:.14em;text-transform:uppercase;
+            padding:9px 12px;cursor:pointer;transition:all .15s;font-weight:700;
+        }
+        .pc-btn:hover{border-color:var(--mech);color:var(--mech)}
+        .pc-btn.primary{background:var(--mech);border-color:var(--mech);color:#fff}
+        .pc-btn.primary:hover{background:#dc2626;border-color:#dc2626;color:#fff}
+        .pc-btn:disabled{opacity:.4;cursor:wait}
+
+        /* Toast when image is saved */
+        .pc-toast{
+            position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(40px);
+            background:var(--sf);border:1px solid var(--hit);color:var(--hit);
+            font-family:'Space Mono',monospace;font-size:11px;letter-spacing:.14em;
+            padding:10px 20px;text-transform:uppercase;font-weight:700;
+            z-index:400;opacity:0;transition:all .3s;pointer-events:none;
+        }
+        .pc-toast.on{transform:translateX(-50%) translateY(0);opacity:1}

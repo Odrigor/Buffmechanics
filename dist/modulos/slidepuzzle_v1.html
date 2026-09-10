@@ -1,0 +1,541 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BuffMechanics | Slide Puzzle</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' fill='%23a855f7'/%3E%3Ctext x='50%25' y='54%25' text-anchor='middle' dominant-baseline='middle' font-family='monospace' font-size='40' font-weight='700' fill='%23ffffff'%3EB%3C/text%3E%3Crect x='2' y='2' width='60' height='60' fill='none' stroke='%23ffffff' stroke-width='3'/%3E%3C/svg%3E">
+    <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="../assets/shared.css">
+    <style>
+        /* Slide Puzzle — purple identity (matches home card --cog-secondary).
+           Categorical difficulty (mode-cards, no tabs), like clicktime: the
+           difference between Easy/Normal/Hard is *how much the puzzle was
+           shuffled*, not a parameter to tune.
+           See MANIFIESTO.md §3.1 (mode-cards as intentional exception). */
+        :root{
+            --accent:#a855f7;
+            --accent-dim:rgba(168,85,247,.12);
+        }
+        body{height:100vh;overflow:hidden;display:flex;align-items:center;justify-content:center}
+
+        /* Board */
+        .board-wrap{
+            display:flex;flex-direction:column;align-items:center;gap:18px;
+            display:none;
+        }
+        .board-wrap.on{display:flex}
+
+        .board{
+            position:relative;
+            width:min(82vmin, 480px);
+            height:min(82vmin, 480px);
+            background:var(--sf);
+            border:1px solid var(--bd);
+            padding:8px;
+            display:grid;
+            grid-template-columns:repeat(3,1fr);
+            grid-template-rows:repeat(3,1fr);
+            gap:6px;
+        }
+
+        .tile{
+            background:var(--sf2);
+            border:1px solid var(--bdl);
+            display:flex;align-items:center;justify-content:center;
+            font-family:'Rajdhani',sans-serif;
+            font-size:64px;font-weight:700;color:var(--t1);
+            cursor:default;
+            transition:transform .14s cubic-bezier(.16,1,.3,1),
+                       background .15s, border-color .15s,
+                       box-shadow .15s;
+            user-select:none;
+            position:relative;
+        }
+        .tile.movable{
+            cursor:pointer;
+            border-color:var(--accent);
+            color:var(--accent);
+        }
+        .tile.movable:hover{
+            background:var(--accent-dim);
+            transform:scale(1.04);
+            box-shadow:0 0 22px rgba(168,85,247,.18);
+        }
+        .tile.solved{
+            border-color:var(--hit);
+            color:var(--hit);
+        }
+        .tile.empty{
+            background:transparent;
+            border:1px dashed var(--bd);
+            cursor:default;
+            color:var(--t3);
+        }
+        .tile.shake{animation:tile-shake .25s ease}
+        @keyframes tile-shake{
+            0%,100%{transform:translateX(0)}
+            25%{transform:translateX(-6px)}
+            75%{transform:translateX(6px)}
+        }
+
+        /* Stats bar above the board */
+        .stats{
+            display:flex;gap:32px;align-items:center;
+            font-family:'Space Mono',monospace;
+        }
+        .stat{display:flex;flex-direction:column;align-items:center;gap:2px}
+        .stat-v{font-size:24px;font-weight:700;color:var(--t1);line-height:1}
+        .stat-l{font-size:8px;color:var(--t2);letter-spacing:.16em;text-transform:uppercase}
+        .stat-v.accent{color:var(--accent)}
+
+        .hint-row{
+            font-family:'Space Mono',monospace;
+            font-size:10px;color:var(--t3);
+            letter-spacing:.14em;text-transform:uppercase;
+            text-align:center;
+        }
+        .hint-row kbd{
+            display:inline-block;padding:1px 6px;
+            background:var(--sf);border:1px solid var(--bd);
+            color:var(--t2);font-family:inherit;font-size:10px;
+            margin:0 2px;
+        }
+
+        /* Mode-cards (3 cards: Easy / Normal / Hard) */
+        .mode-cards{display:flex;gap:10px;max-width:560px;width:100%;padding:0 20px;margin:18px 0}
+        .mcard{flex:1;background:var(--sf);border:1px solid var(--bd);padding:22px 14px;cursor:pointer;transition:all .2s;text-align:center}
+        .mcard:hover{border-color:var(--t2);transform:translateY(-3px)}
+        .mcard .micon{font-size:26px;margin-bottom:8px}
+        .mcard .mname{font-size:15px;font-weight:700;letter-spacing:.05em;margin-bottom:4px}
+        .mcard .mdesc{font-family:'Space Mono',monospace;font-size:9px;color:var(--t2);line-height:1.6}
+        .mcard.sel{border-color:var(--accent);background:var(--accent-dim)}
+
+        .setup .gobtn{max-width:320px;padding:14px 64px;width:auto}
+
+        /* Win flash */
+        .win-flash{
+            position:fixed;inset:0;z-index:90;
+            background:radial-gradient(circle,rgba(168,85,247,.15) 0%,transparent 60%);
+            opacity:0;pointer-events:none;transition:opacity .3s;
+        }
+        .win-flash.on{opacity:1;animation:wpulse 1s ease}
+        @keyframes wpulse{0%{opacity:0}50%{opacity:1}100%{opacity:0}}
+    </style>
+<link rel="stylesheet" href="../assets/experience.css">
+<link rel="stylesheet" href="../assets/workspace.css">
+</head>
+<body>
+<div class="win-flash" id="win-flash"></div>
+
+<!-- HUD -->
+<div class="hud" id="hud">
+    <div class="hb">
+        <span class="hl" data-i18n="sp.moves">Moves</span>
+        <span class="hv" style="color:var(--accent)" id="h-mv">0</span>
+    </div>
+    <div class="hb c">
+        <div class="tpill"><div class="tdot"></div><span class="hv" id="h-tm" style="font-size:20px">0:00</span></div>
+    </div>
+    <div class="hb r">
+        <span class="hl" data-i18n="sp.difficulty">Difficulty</span>
+        <span class="hv" id="h-df" style="font-size:18px">—</span>
+    </div>
+</div>
+
+<!-- Board (visible during gameplay) -->
+<div class="board-wrap" id="board-wrap">
+    <div class="board" id="board"></div>
+    <div class="hint-row">
+        <span data-i18n="sp.boardhint">Click an adjacent tile · or use</span> <kbd>↑</kbd> <kbd>↓</kbd> <kbd>←</kbd> <kbd>→</kbd>
+    </div>
+</div>
+
+<!-- SETUP -->
+<div class="setup" id="setup">
+    <button class="snd-toggle" id="snd-btn" onclick="Snd.toggle()">♪ ON</button>
+    <div class="setup-logo">SLD</div>
+    <div class="stitle">SLIDE <em>PUZZLE</em></div>
+    <div class="ssub" data-i18n="sp.sub">Spatial reasoning · working memory</div>
+
+    <div class="mode-cards">
+        <div class="mcard sel" id="mc-easy" onclick="UI.pick('easy')">
+            <div class="micon">◐</div>
+            <div class="mname" data-i18n="sp.easy">EASY</div>
+            <div class="mdesc" data-i18n-html="sp.easy.desc">20 shuffles<br>Warm-up</div>
+        </div>
+        <div class="mcard" id="mc-normal" onclick="UI.pick('normal')">
+            <div class="micon">◑</div>
+            <div class="mname" data-i18n="sp.normal">NORMAL</div>
+            <div class="mdesc" data-i18n-html="sp.normal.desc">60 shuffles<br>Balanced</div>
+        </div>
+        <div class="mcard" id="mc-hard" onclick="UI.pick('hard')">
+            <div class="micon">●</div>
+            <div class="mname" data-i18n="sp.hard">HARD</div>
+            <div class="mdesc" data-i18n-html="sp.hard.desc">150 shuffles<br>Stress test</div>
+        </div>
+    </div>
+
+    <button class="gobtn" onclick="Game.start()" data-i18n="m.start.plain">START</button>
+    <button class="gobtn-back" onmouseenter="Snd.tick(660)" onclick="BM.backToHome()" data-i18n="m.back">← BACK TO MENU</button>
+    <div class="hint" data-i18n="sp.hint">Arrange tiles 1 through 8 in order. Empty slot bottom-right.</div>
+</div>
+
+<!-- RESULTS -->
+<div class="res hide" id="res">
+    <div class="rcard">
+        <div style="text-align:center">
+            <div class="mono" style="font-size:8px;letter-spacing:.14em;color:var(--t2);margin-bottom:4px" id="r-mode">PUZZLE SOLVED</div>
+            <div style="font-size:44px;font-weight:700;color:var(--accent)" id="r-moves">0</div>
+            <div class="mono" style="font-size:9px;color:var(--t2);margin-top:2px" data-i18n="sp.totalmoves">TOTAL MOVES</div>
+            <div id="r-new-best"></div>
+        </div>
+        <div class="rgrid">
+            <div class="rcell"><div class="rv" id="r-time">0:00</div><div class="rl" data-i18n="sp.time">Time</div></div>
+            <div class="rcell"><div class="rv" style="color:var(--accent)" id="r-mpm">0</div><div class="rl" data-i18n="sp.movesmin">Moves / min</div></div>
+        </div>
+        <div class="rbtns">
+            <button class="rb-s" onclick="location.href='../index.html'" data-i18n="m.exit">EXIT</button>
+            <button class="rb-s" onclick="Game.toSetup()" data-i18n="m.menu">MENU</button>
+            <button class="rb-p" onclick="Game.retry()" data-i18n="m.retry">RETRY</button>
+        </div>
+    </div>
+</div>
+
+<script src="../assets/i18n.js"></script>
+<script src="../assets/shared.js"></script>
+<script src="../assets/history.js"></script>
+<script src="../assets/training-core.js"></script>
+<script src="../assets/routine.js"></script>
+<script src="../assets/experience.js"></script>
+<script>
+const MODULE = 'slidepuzzle';
+
+const SHUFFLES = { easy: 20, normal: 60, hard: 150 };
+
+// ═══ UI ═══
+const UI = {
+    diff: 'easy',
+    pick(d){
+        this.diff = d;
+        ['easy','normal','hard'].forEach(k => {
+            document.getElementById('mc-' + k).classList.toggle('sel', k === d);
+        });
+        Snd.tick(840);
+    }
+};
+
+// ═══ GAME ═══
+//
+// State representation: flat array of length 9 holding numbers 1..8 + 0
+// (0 = empty slot). Index = row*3 + col. Solved state = [1,2,3,4,5,6,7,8,0].
+//
+// Movability: a tile at index `i` is movable iff it's orthogonally adjacent
+// to the empty slot (index of 0). Clicking it swaps them.
+
+const SOLVED = [1,2,3,4,5,6,7,8,0];
+
+const Game = {
+    state: SOLVED.slice(),
+    moves: 0,
+    startTime: 0,
+    elapsedMs: 0,
+    pausedAt: 0,
+    pausedAccum: 0,
+    active: false,
+    paused: false,
+    timerI: null,
+    qs: null,
+    diff: 'easy',
+
+    // ── Setup / teardown ───────────────────────────────────
+
+    start(){
+        Snd.init();
+        this.diff = UI.diff;
+        this.state = this.makeShuffled(SHUFFLES[this.diff]);
+        this.moves = 0;
+        this.elapsedMs = 0;
+        this.pausedAccum = 0;
+        this.startTime = this.clock.now();
+        this.active = true;
+        this.paused = false;
+
+        document.getElementById('setup').classList.add('hide');
+        document.getElementById('res').classList.add('hide');
+        document.getElementById('hud').classList.add('on');
+        document.getElementById('board-wrap').classList.add('on');
+        document.getElementById('h-df').textContent = I18N.t('sp.'+this.diff);
+        this.render();
+        this.updateHUD();
+
+        if(this.qs && this.qs.btn) this.qs.btn.classList.add('on');
+
+        this.timerI = this.scheduler.setInterval(() => {
+            if(!this.active || this.paused) return;
+            this.elapsedMs = this.clock.now() - this.startTime - this.pausedAccum;
+            this.updateTimer();
+        }, 250);
+    },
+
+    retry(){ this.start(); },
+
+    toSetup(){
+        document.getElementById('res').classList.add('hide');
+        document.getElementById('board-wrap').classList.remove('on');
+        document.getElementById('hud').classList.remove('on');
+        document.getElementById('setup').classList.remove('hide');
+        if(this.qs && this.qs.btn) this.qs.btn.classList.remove('on');
+        this.active = false;
+    },
+
+    // ── Pause / Resume ──
+    // This module is unique in the set: pausing preserves board state
+    // because the puzzle has no timing mechanic that could be abused.
+    // Reasoning is the whole game; the board doesn't "do anything" while
+    // paused, so resuming where you left off gives no unfair advantage.
+    // The clock is still frozen though — that part is consistent with
+    // the rest of the system.
+    pause(){
+        if(!this.active || this.paused) return;
+        this.paused = true;
+        this.pausedAt = this.clock.now();
+    },
+    resume(){
+        if(!this.active || !this.paused) return;
+        this.pausedAccum += this.clock.now() - this.pausedAt;
+        this.paused = false;
+    },
+    exit(){
+        this.active = false;
+        this.paused = false;
+        this.scheduler.clear(this.timerI);
+    },
+
+    // ── Shuffle generation ──
+    // The classic mistake: random permutation. Half of all permutations
+    // of the 8-puzzle are unsolvable. We avoid this by starting from
+    // SOLVED and applying N valid moves. Result is guaranteed solvable
+    // (because the inverse sequence solves it).
+    //
+    // We also avoid backtracking moves so the shuffle "drifts" instead
+    // of oscillating around the same few tiles.
+    makeShuffled(nMoves){
+        let seed=20260907+nMoves;const random=()=>{seed=(Math.imul(seed,1664525)+1013904223)>>>0;return seed/4294967296;};
+        const state = SOLVED.slice();
+        let lastMove = -1;
+        for(let i = 0; i < nMoves; i++){
+            const empty = state.indexOf(0);
+            const neighbors = this.neighborsOf(empty);
+            // Exclude the move that would undo the previous one
+            const choices = neighbors.filter(n => n !== lastMove);
+            const pick = choices[Math.floor(random() * choices.length)];
+            // Swap
+            state[empty] = state[pick];
+            state[pick] = 0;
+            lastMove = empty;
+        }
+        // Edge case: shuffle accidentally produced solved state
+        if(state.every((v,i) => v === SOLVED[i])){
+            const e=state.indexOf(0),n=this.neighborsOf(e)[0];state[e]=state[n];state[n]=0;
+        }
+        return state;
+    },
+
+    neighborsOf(idx){
+        const r = Math.floor(idx / 3), c = idx % 3;
+        const result = [];
+        if(r > 0) result.push(idx - 3);   // up
+        if(r < 2) result.push(idx + 3);   // down
+        if(c > 0) result.push(idx - 1);   // left
+        if(c < 2) result.push(idx + 1);   // right
+        return result;
+    },
+
+    // ── Move logic ──
+
+    tryMove(tileIdx){
+        if(!this.active || this.paused) return;
+        const empty = this.state.indexOf(0);
+        if(!this.neighborsOf(empty).includes(tileIdx)){
+            // Not adjacent — shake feedback
+            const el = document.getElementById('tile-' + tileIdx);
+            if(el){
+                el.classList.add('shake');
+                Snd.miss();
+                this.scheduler.setTimeout(() => el.classList.remove('shake'), 250);
+            }
+            return;
+        }
+        // Swap
+        this.state[empty] = this.state[tileIdx];
+        this.state[tileIdx] = 0;
+        this.moves++;
+        Snd.hit();
+        this.render();
+        this.updateHUD();
+
+        if(this.isSolved()){
+            this.win();
+        }
+    },
+
+    // Arrow keys: think of arrows as "push a tile from this direction
+    // toward the empty slot". So ↑ means: there's a tile *below* the
+    // empty slot, push it up into the empty space. This matches the
+    // physical intuition of grabbing the tile near the arrow.
+    handleArrow(key){
+        if(!this.active || this.paused) return;
+        const empty = this.state.indexOf(0);
+        const r = Math.floor(empty / 3), c = empty % 3;
+        let from = -1;
+        if(key === 'ArrowUp'    && r < 2) from = empty + 3;   // tile below pushes up
+        if(key === 'ArrowDown'  && r > 0) from = empty - 3;   // tile above pushes down
+        if(key === 'ArrowLeft'  && c < 2) from = empty + 1;   // tile right pushes left
+        if(key === 'ArrowRight' && c > 0) from = empty - 1;   // tile left pushes right
+        if(from >= 0) this.tryMove(from);
+    },
+
+    isSolved(){
+        return this.state.every((v, i) => v === SOLVED[i]);
+    },
+
+    // ── Rendering ──
+
+    render(){
+        const board = document.getElementById('board');
+        board.innerHTML = '';
+        const empty = this.state.indexOf(0);
+        const moveable = new Set(this.neighborsOf(empty));
+        const solvedFlags = this.computeSolvedFlags();
+
+        this.state.forEach((v, i) => {
+            const t = document.createElement('div');
+            t.id = 'tile-' + i;
+            t.className = 'tile';
+            if(v === 0){
+                t.classList.add('empty');
+                t.textContent = '';
+            } else {
+                t.textContent = v;
+                if(moveable.has(i)) t.classList.add('movable');
+                if(solvedFlags[i])   t.classList.add('solved');
+                t.onclick = () => this.tryMove(i);
+                t.onmouseenter = () => {
+                    if(moveable.has(i)) Snd.tick(840);
+                };
+            }
+            board.appendChild(t);
+        });
+    },
+
+    // A tile is "solved" if it's in its correct final position. Used to
+    // gradually green-tint the puzzle as the user makes progress.
+    computeSolvedFlags(){
+        return this.state.map((v, i) => v !== 0 && v === SOLVED[i]);
+    },
+
+    // ── HUD ──
+
+    updateHUD(){
+        document.getElementById('h-mv').textContent = this.moves;
+    },
+
+    updateTimer(){
+        const s = Math.floor(this.elapsedMs / 1000);
+        const m = Math.floor(s / 60);
+        const ss = (s % 60).toString().padStart(2, '0');
+        document.getElementById('h-tm').textContent = m + ':' + ss;
+    },
+
+    // ── Win / results ──
+
+    win(){
+        this.active = false;
+        this.scheduler.clear(this.timerI);
+        const totalMs = this.clock.now() - this.startTime - this.pausedAccum;
+        this.elapsedMs = totalMs;
+        Snd.perfect();
+
+        const flash = document.getElementById('win-flash');
+        flash.classList.add('on');
+        this.scheduler.setTimeout(() => flash.classList.remove('on'), 1000);
+
+        // Brief delay so the user sees the final state before results overlay
+        this.scheduler.setTimeout(() => this.showResults(), 700);
+    },
+
+    showResults(){
+        if(this.qs && this.qs.btn) this.qs.btn.classList.remove('on');
+        document.getElementById('hud').classList.remove('on');
+        document.getElementById('board-wrap').classList.remove('on');
+
+        const sec = this.elapsedMs / 1000;
+        const min = sec / 60;
+        const mpm = min > 0 ? Math.round(this.moves / min) : 0;
+        const s = Math.floor(sec);
+        const m = Math.floor(s / 60);
+        const ss = (s % 60).toString().padStart(2, '0');
+
+        document.getElementById('r-mode').textContent = I18N.t('sp.'+this.diff) + ' — ' + I18N.t('sp.solved');
+        document.getElementById('r-moves').textContent = this.moves;
+        document.getElementById('r-time').textContent = m + ':' + ss;
+        document.getElementById('r-mpm').textContent = mpm;
+
+        // Persistence: best metric is "fewest moves" within the same difficulty.
+        // Different difficulties have wildly different optimal solutions
+        // (Easy ~20 ideal moves, Hard ~80+), so we track per-difficulty bests.
+        Store.saveSession(MODULE, {
+            diff: this.diff,
+            moves: this.moves,
+            timeMs: Math.round(this.elapsedMs),
+            mpm
+        });
+        const best = Store.saveBest(MODULE, 'moves_' + this.diff, this.moves, false);
+        document.getElementById('r-new-best').innerHTML =
+            best.isNew ? '<span class="new-best">'+I18N.t('m.newbest')+'</span>' : '';
+
+        document.getElementById('res').classList.remove('hide');
+    }
+};
+
+// ═══ INIT ═══
+
+if(!Snd.on) document.getElementById('snd-btn').textContent = '♪ OFF';
+
+// Mode-card hover ticks — module tone (840 Hz, between stroop 784 and neurogrid 880)
+document.getElementById('mc-easy').addEventListener('mouseenter', () => Snd.tick(840));
+document.getElementById('mc-normal').addEventListener('mouseenter', () => Snd.tick(840));
+document.getElementById('mc-hard').addEventListener('mouseenter', () => Snd.tick(840));
+
+// Arrow key handling — only during gameplay, blocked when switcher is open
+window.addEventListener('keydown', (e) => {
+    if(!Game.active || e.repeat) return;
+    if(Game.qs && Game.qs.isOpen) return;
+    if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.key)){
+        e.preventDefault();
+        Game.handleArrow(e.key);
+    }
+});
+
+// Re-render dynamic text on language change. Static data-i18n nodes (mode
+// cards, hints) update automatically; this refreshes the HUD difficulty label
+// when a game is in progress.
+window.addEventListener('langchange', () => {
+    if(Game.active && Game.diff){
+        const df = document.getElementById('h-df');
+        if(df) df.textContent = I18N.t('sp.'+Game.diff);
+    }
+});
+
+// Quick switcher — pause + module nav
+BM.attachTraining({module:MODULE,game:Game,ui:UI,start:'start',finish:'showResults'});
+Game.qs = BM.mountQuickSwitcher({
+    current: MODULE,
+    onPause:  () => Game.pause(),
+    onResume: () => Game.resume(),
+    onExit:   () => Game.exit()
+});
+</script>
+</body>
+</html>

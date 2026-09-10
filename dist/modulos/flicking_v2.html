@@ -1,0 +1,775 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BuffMechanics | Anti-Flick Stability</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' fill='%23ef4444'/%3E%3Ctext x='50%25' y='54%25' text-anchor='middle' dominant-baseline='middle' font-family='monospace' font-size='40' font-weight='700' fill='%23ffffff'%3EB%3C/text%3E%3Crect x='2' y='2' width='60' height='60' fill='none' stroke='%23ffffff' stroke-width='3'/%3E%3C/svg%3E">
+    <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="../assets/shared.css">
+    <style>
+        :root{
+            --accent:#ef4444;
+            --accent-dim:rgba(239,68,68,.12);
+            --stab:#00ff88;
+            --stab-dim:rgba(0,255,136,.12);
+        }
+        body{height:100vh;overflow:hidden;cursor:crosshair}
+
+        /* Arena grid */
+        #arena{position:fixed;inset:0;z-index:0;
+            background-image:linear-gradient(rgba(255,255,255,.015) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.015) 1px,transparent 1px);
+            background-size:60px 60px}
+
+        /* Target */
+        .tgt{position:absolute;border-radius:50%;transform:translate(-50%,-50%) scale(0);z-index:10;cursor:crosshair;animation:tIn .2s cubic-bezier(.34,1.56,.64,1) forwards}
+        @keyframes tIn{to{transform:translate(-50%,-50%) scale(1)}}
+        .tgt-outer{width:100%;height:100%;border-radius:50%;border:2px solid var(--accent);display:flex;align-items:center;justify-content:center;position:relative;transition:all .15s}
+        .tgt-core{width:6px;height:6px;border-radius:50%;background:var(--accent);box-shadow:0 0 8px var(--accent);transition:all .15s}
+
+        /* Progress ring */
+        .tgt svg{position:absolute;inset:-4px;width:calc(100% + 8px);height:calc(100% + 8px);transform:rotate(-90deg)}
+        .ring-bg{fill:none;stroke:var(--bd);stroke-width:3}
+        .ring-fg{fill:none;stroke:var(--accent);stroke-width:3;stroke-linecap:round;stroke-dasharray:283;stroke-dashoffset:283;transition:stroke-dashoffset .08s}
+
+        /* States */
+        .tgt.hover .tgt-outer{border-color:var(--warn);background:rgba(251,191,36,.06)}
+        .tgt.hover .tgt-core{background:var(--warn);box-shadow:0 0 8px var(--warn)}
+        .tgt.hover .ring-fg{stroke:var(--warn)}
+        .tgt.locked .tgt-outer{border-color:var(--stab);background:var(--stab-dim);box-shadow:0 0 24px var(--stab-dim)}
+        .tgt.locked .tgt-core{background:var(--stab);box-shadow:0 0 12px var(--stab)}
+        .tgt.locked .ring-fg{stroke:var(--stab)}
+
+        /* Completion burst */
+        .complete-burst{position:absolute;border-radius:50%;transform:translate(-50%,-50%);pointer-events:none;z-index:15;border:2px solid var(--stab);animation:cburst .35s ease-out forwards}
+        @keyframes cburst{0%{width:20px;height:20px;opacity:1}100%{width:80px;height:80px;opacity:0}}
+
+        /* Time popup */
+        .time-pop{position:absolute;pointer-events:none;z-index:20;font-family:'Space Mono',monospace;font-size:14px;font-weight:700;animation:tpop .7s ease-out forwards}
+        @keyframes tpop{0%{opacity:1;transform:translate(-50%,-50%) scale(1)}100%{opacity:0;transform:translate(-50%,-100%) scale(.8)}}
+
+        /* Sismograph */
+        .sismo-wrap{position:fixed;bottom:40px;left:50%;transform:translateX(-50%);z-index:100;pointer-events:none;opacity:0;transition:opacity .3s;display:flex;flex-direction:column;align-items:center;gap:4px}
+        .sismo-wrap.on{opacity:1}
+        .sismo-label{font-family:'Space Mono',monospace;font-size:8px;color:var(--t3);letter-spacing:.12em;text-transform:uppercase}
+        .sismo{width:300px;height:40px;background:var(--sf);border:1px solid var(--bd);position:relative;overflow:hidden}
+        .sismo canvas{width:100%;height:100%}
+        .sismo-val{font-family:'Space Mono',monospace;font-size:11px;font-weight:700;min-width:60px;text-align:center}
+
+        /* Results mini chart */
+        .mini-chart{display:flex;align-items:flex-end;gap:2px;height:50px;margin:12px 0;padding:0 4px}
+        .mc-bar{flex:1;min-width:3px;max-width:12px;border-radius:2px 2px 0 0;background:var(--accent);transition:height .4s ease}
+        .mc-bar.fast{background:var(--stab)}
+        .mc-bar.slow{background:var(--warn)}
+
+        .rcard .rgrid:first-of-type{grid-template-columns:1fr 1fr 1fr}
+
+        /* ═══ Quick Start + Tune ═══ */
+        .qs-card{display:flex;flex-direction:column;align-items:center;max-width:440px;width:100%;margin:0 auto}
+        .qs-mode{width:100%;text-align:center;background:var(--sf);border:1px solid var(--bd);padding:18px 20px;margin-bottom:12px;transition:border-color .2s}
+        .qs-mode-label{font-family:'Space Mono',monospace;font-size:9px;letter-spacing:.18em;color:var(--t3);text-transform:uppercase;margin-bottom:6px}
+        .qs-mode-value{font-size:24px;font-weight:700;letter-spacing:.02em;color:var(--t1);line-height:1}
+        .qs-mode-sub{font-family:'Space Mono',monospace;font-size:10px;color:var(--t2);margin-top:6px;letter-spacing:.04em}
+        .tune-toggle{width:100%;display:flex;align-items:center;justify-content:center;gap:8px;background:none;border:1px solid var(--bd);color:var(--t2);font-family:'Space Mono',monospace;font-size:10px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;padding:10px;cursor:pointer;margin-bottom:12px;transition:all .2s}
+        .tune-toggle:hover{border-color:var(--t2);color:var(--t1)}
+        .tune-toggle .chev{transition:transform .3s;display:inline-block}
+        .tune-toggle.open .chev{transform:rotate(90deg)}
+        .tune-panel{width:100%;overflow:hidden;max-height:0;opacity:0;transition:max-height .35s cubic-bezier(.4,0,.2,1),opacity .25s,margin .35s;margin-bottom:0}
+        .tune-panel.open{max-height:1000px;opacity:1;margin-bottom:12px}
+        .tune-inner{background:var(--sf);border:1px solid var(--bd);padding:18px 18px 14px}
+        .tune-adv-divider{display:flex;align-items:center;gap:10px;margin:16px 0 12px;font-family:'Space Mono',monospace;font-size:8px;letter-spacing:.16em;color:var(--t3);text-transform:uppercase}
+        .tune-adv-divider::before,.tune-adv-divider::after{content:'';flex:1;height:1px;background:var(--bd)}
+        .recoil-sensitivity{display:grid;grid-template-columns:minmax(0,1fr) 78px;gap:8px;align-items:center}
+        .recoil-sensitivity input[type=number]{width:78px;background:var(--bg);border:1px solid var(--bd);color:var(--accent);font:700 13px 'Space Mono',monospace;padding:7px 6px;text-align:center;outline:none}
+        .recoil-sensitivity input[type=number]:focus{border-color:var(--accent)}
+        .recoil-note{font-family:'Space Mono',monospace;font-size:9px;line-height:1.5;color:var(--t3);margin-top:7px}
+        .tgt.recoil .tgt-outer{box-shadow:0 0 0 1px rgba(251,191,36,.45),0 0 20px rgba(251,191,36,.12)}
+        .tgt.recoil .tgt-core{background:var(--warn);box-shadow:0 0 8px var(--warn)}
+
+        /* ═══ Results extension ═══ */
+        .res-metric{text-align:center;margin-bottom:6px}
+        .res-metric-value{font-size:56px;font-weight:700;color:var(--accent);line-height:1;letter-spacing:-1px}
+        .res-metric-unit{font-size:22px;color:var(--t2);font-weight:700;margin-left:4px}
+        .res-metric-label{font-family:'Space Mono',monospace;font-size:9px;letter-spacing:.16em;color:var(--t3);text-transform:uppercase;margin-top:6px}
+        .res-compare{text-align:center;font-family:'Space Mono',monospace;font-size:12px;letter-spacing:.04em;margin:14px 0;min-height:20px}
+        .res-compare.better{color:var(--stab,#10b981)}
+        .res-compare.worse{color:var(--t2)}
+        .res-compare.record{color:var(--gold,#eab308)}
+        .res-compare .ar{font-weight:700;margin-right:4px}
+        .res-evo{margin:16px 0;padding:0 4px}
+        .res-evo-title{font-family:'Space Mono',monospace;font-size:8px;letter-spacing:.16em;color:var(--t3);text-transform:uppercase;margin-bottom:8px;display:flex;justify-content:space-between}
+        .res-evo-bars{display:flex;align-items:flex-end;gap:3px;height:50px}
+        .res-evo-bar{flex:1;background:var(--accent);opacity:.35;min-height:3px;border-radius:1px;transition:height .4s cubic-bezier(.4,0,.2,1),opacity .2s}
+        .res-evo-bar.latest{opacity:.95}
+        .res-evo-bar:hover{opacity:1}
+        .res-evo-empty{font-family:'Space Mono',monospace;font-size:9px;color:var(--t3);text-align:center;padding:14px 0;letter-spacing:.1em}
+        .res-details{display:flex;justify-content:center;gap:18px;flex-wrap:wrap;font-family:'Space Mono',monospace;font-size:10px;color:var(--t2);margin:14px 0;letter-spacing:.04em}
+        .res-details b{color:var(--t1);font-weight:700}
+    </style>
+<link rel="stylesheet" href="../assets/experience.css">
+<link rel="stylesheet" href="../assets/workspace.css">
+</head>
+<body>
+<div id="arena"></div>
+
+<!-- HUD -->
+<div class="hud" id="hud">
+    <div class="hb"><span class="hl" data-i18n="flk.score">Score</span><span class="hv" style="color:var(--accent)" id="h-sc">0</span></div>
+    <div class="hb c">
+        <div class="tpill"><div class="tdot" id="h-tdot"></div><span class="hv" id="h-tm" style="font-size:20px">60</span></div>
+        <div class="lives" id="h-lives" style="margin-top:4px"></div>
+    </div>
+    <div class="hb r"><span class="hl" data-i18n="flk.targets">Targets</span><span class="hv" id="h-tgts">0</span></div>
+</div>
+
+<!-- SISMOGRAPH -->
+<div class="sismo-wrap" id="sismo-wrap">
+    <div style="display:flex;align-items:center;gap:12px">
+        <div class="sismo"><canvas id="sismo-canvas" width="300" height="40"></canvas></div>
+        <div class="sismo-val" id="sismo-val" style="color:var(--t3)">0.0px</div>
+    </div>
+    <div class="sismo-label">JITTER MONITOR</div>
+</div>
+
+<!-- SETUP -->
+<div class="setup" id="setup">
+    <button class="snd-toggle" id="snd-btn" onclick="Snd.toggle()">♪ ON</button>
+    <div class="setup-logo">STB</div>
+    <div class="stitle">ANTI-FLICK <em>STABILITY</em></div>
+    <div class="ssub" data-i18n="flk.sub">Flick to the target, then freeze · trains deceleration + precision</div>
+
+    <div class="qs-card">
+        <div class="qs-mode" id="qs-mode">
+            <div class="qs-mode-label" data-i18n="m.mode">Mode</div>
+            <div class="qs-mode-value" id="qs-mode-value">45 seconds</div>
+            <div class="qs-mode-sub" id="qs-mode-sub">Medium · flick, stop, hold still</div>
+        </div>
+
+        <button class="tune-toggle" id="tune-toggle" onclick="UI.toggleTune()">
+            <span class="chev">▸</span> <span data-i18n="m.tune">Tune</span>
+        </button>
+
+        <div class="tune-panel" id="tune-panel">
+            <div class="tune-inner">
+                <!-- Difficulty preset -->
+                <div class="pgroup"><div class="plabel" data-i18n="m.difficulty">Difficulty</div>
+                    <div class="pbtn-row" id="t-diff">
+                        <button class="pb" onclick="UI.setDiff('easy',this)" data-i18n="m.easy">Easy</button>
+                        <button class="pb on" onclick="UI.setDiff('medium',this)" data-i18n="m.medium">Medium</button>
+                        <button class="pb" onclick="UI.setDiff('hard',this)" data-i18n="m.hard">Hard</button>
+                    </div>
+                </div>
+
+                <!-- Duration -->
+                <div class="pgroup"><div class="plabel" data-i18n="m.duration">Duration</div>
+                    <div class="pbtn-row" id="t-time">
+                        <button class="pb" onclick="UI.setTime(30,this)">30s</button>
+                        <button class="pb on" onclick="UI.setTime(45,this)">45s</button>
+                        <button class="pb" onclick="UI.setTime(60,this)">60s</button>
+                        <button class="pb" onclick="UI.setTime(90,this)">90s</button>
+                        <button class="pb" onclick="UI.setTime(0,this)">∞</button>
+                    </div>
+                </div>
+
+                <!-- ── Advanced ── -->
+                <div class="tune-adv-divider" data-i18n="m.advanced">Advanced</div>
+
+                <div class="pgroup"><div class="plabel" data-i18n="m.challenge">Challenge</div>
+                    <div class="pbtn-row" id="t-challenge">
+                        <button class="pb on" onclick="UI.setChallenge('normal',this)" data-i18n="m.normal">Normal</button>
+                        <button class="pb" onclick="UI.setChallenge('survival',this)" data-i18n="m.survival">Survival — 3 lives</button>
+                    </div>
+                    <div class="mono" style="font-size:9px;color:var(--t3);margin-top:6px;line-height:1.5" id="challenge-hint" data-i18n="flk.hint.normal">
+                        Normal: train for the set duration.
+                    </div>
+                </div>
+
+                <div class="pgroup">
+                    <div class="plabel" data-i18n="flk.recoil">Recoil Train</div>
+                    <button class="pcheck" id="recoil-toggle" type="button" aria-pressed="false" onclick="UI.setRecoilTrain()">
+                        <span class="box" aria-hidden="true">✓</span><span id="recoil-toggle-label">Off</span>
+                    </button>
+                    <div class="pcheck-desc" data-i18n="flk.recoil.desc">While you hold a target, it rises and sways like recoil. Compensate with the mouse to keep the lock.</div>
+                </div>
+
+                <div class="pgroup"><div class="plabel" data-i18n="flk.targetsize">Target size</div>
+                    <div class="slider-wrap">
+                        <span class="mono" style="font-size:9px;color:var(--t3)" data-i18n="m.small">Small</span>
+                        <input type="range" id="sl-size" min="30" max="90" value="52" oninput="UI.updSlider('size')">
+                        <span class="mono" style="font-size:9px;color:var(--t3)" data-i18n="m.big">Big</span>
+                        <span class="slider-val" id="sl-size-v">52px</span>
+                    </div>
+                </div>
+                <div class="pgroup"><div class="plabel" data-i18n="flk.jitter">Jitter threshold (lower = harder)</div>
+                    <div class="slider-wrap">
+                        <span class="mono" style="font-size:9px;color:var(--t3)" data-i18n="m.strict">Strict</span>
+                        <input type="range" id="sl-thresh" min="0.5" max="4" value="1.5" step="0.25" oninput="UI.updSlider('thresh')">
+                        <span class="mono" style="font-size:9px;color:var(--t3)" data-i18n="m.loose">Loose</span>
+                        <span class="slider-val" id="sl-thresh-v">1.5px</span>
+                    </div>
+                </div>
+                <div class="pgroup"><div class="plabel" data-i18n="flk.holdtime">Hold time required</div>
+                    <div class="slider-wrap">
+                        <span class="mono" style="font-size:9px;color:var(--t3)" data-i18n="m.short">Short</span>
+                        <input type="range" id="sl-hold" min="300" max="1500" value="750" step="50" oninput="UI.updSlider('hold')">
+                        <span class="mono" style="font-size:9px;color:var(--t3)" data-i18n="m.long">Long</span>
+                        <span class="slider-val" id="sl-hold-v">750ms</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <button class="gobtn" style="width:100%" onclick="Game.launch()" data-i18n="m.start">▶ START</button>
+        <button class="gobtn-back" onmouseenter="Snd.tick(660)" onclick="BM.backToHome()" data-i18n="m.back">← BACK TO MENU</button>
+    </div>
+
+    <div class="hint" data-i18n="flk.hint">Flick to the target, then freeze. Train your deceleration.</div>
+</div>
+
+<!-- RESULTS -->
+<div class="res hide" id="res">
+    <div class="rcard">
+        <div class="hl" id="r-mode" style="text-align:center;margin-bottom:10px">SESSION COMPLETE</div>
+
+        <!-- Primary metric: avg stabilize time -->
+        <div class="res-metric">
+            <span class="res-metric-value" id="r-primary">0</span><span class="res-metric-unit">ms</span>
+            <div class="res-metric-label" data-i18n="flk.metric">Avg stabilize time</div>
+        </div>
+
+        <!-- Comparison -->
+        <div class="res-compare" id="r-compare"></div>
+
+        <!-- Evolution -->
+        <div class="res-evo">
+            <div class="res-evo-title"><span data-i18n="m.recent">Recent sessions</span><span id="r-evo-best"></span></div>
+            <div class="res-evo-bars" id="r-evo-bars"></div>
+        </div>
+
+        <!-- This-session stabilization timeline -->
+        <div class="res-evo-title" style="margin-top:6px" data-i18n="flk.persession">This session — per target</div>
+        <div class="mini-chart" id="r-chart"></div>
+
+        <!-- Details -->
+        <div class="res-details" id="r-details"></div>
+
+        <div class="rbtns">
+            <button class="rb-s" onclick="location.href='../index.html'" data-i18n="m.exit">EXIT</button>
+            <button class="rb-s" onclick="Game.toSetup()" data-i18n="m.menu">MENU</button>
+            <button class="rb-p" onclick="Game.retry()" data-i18n="m.retry">RETRY</button>
+        </div>
+    </div>
+</div>
+
+<script src="../assets/i18n.js"></script>
+<script src="../assets/shared.js"></script>
+<script src="../assets/history.js"></script>
+<script src="../assets/training-core.js"></script>
+<script src="../assets/routine.js"></script>
+<script src="../assets/experience.js"></script>
+<script>
+const MODULE='flicking';
+
+const PRESETS={
+    easy:{size:70,threshold:2.5,holdMs:600},
+    medium:{size:52,threshold:1.5,holdMs:750},
+    hard:{size:36,threshold:0.8,holdMs:900}
+};
+
+// Global setting shared by Anti-Flick sessions and the 5-minute routine.
+const MOUSE_PROFILES=BM.MouseSettings.profiles;
+
+const UI={
+    diff:'medium', time:45,
+    size:52, thresh:1.5, hold:750,
+    challenge:'normal',
+    recoilTrain:false,
+    tuneOpen:false,
+
+    toggleTune(){
+        this.tuneOpen=!this.tuneOpen;
+        document.getElementById('tune-toggle').classList.toggle('open',this.tuneOpen);
+        document.getElementById('tune-panel').classList.toggle('open',this.tuneOpen);
+        Snd.tick(415);
+    },
+
+    setDiff(k,btn){
+        this.diff=k;BM.selectPb(btn);
+        const p=PRESETS[k];
+        this.size=p.size;this.thresh=p.threshold;this.hold=p.holdMs;
+        // Sync sliders
+        document.getElementById('sl-size').value=p.size;
+        document.getElementById('sl-size-v').textContent=p.size+'px';
+        document.getElementById('sl-thresh').value=p.threshold;
+        document.getElementById('sl-thresh-v').textContent=p.threshold+'px';
+        document.getElementById('sl-hold').value=p.holdMs;
+        document.getElementById('sl-hold-v').textContent=p.holdMs+'ms';
+        this.refreshSummary();
+    },
+    setTime(v,btn){this.time=v;BM.selectPb(btn);this.refreshSummary()},
+
+    setChallenge(c,btn){
+        this.challenge=c;BM.selectPb(btn);
+        document.getElementById('challenge-hint').textContent = c==='survival'
+            ? I18N.t('flk.hint.surv')
+            : I18N.t('flk.hint.normal');
+        this.refreshSummary();
+    },
+
+    setRecoilTrain(){
+        this.recoilTrain=!this.recoilTrain;
+        this.syncRecoilToggle();
+        this.refreshSummary();
+    },
+
+    syncRecoilToggle(){
+        const toggle=document.getElementById('recoil-toggle');
+        if(!toggle)return;
+        toggle.classList.toggle('on',this.recoilTrain);
+        toggle.setAttribute('aria-pressed',String(this.recoilTrain));
+        document.getElementById('recoil-toggle-label').textContent=this.recoilTrain?(I18N.lang==='es'?'Activado':'On'):(I18N.lang==='es'?'Desactivado':'Off');
+    },
+
+    updSlider(key){
+        if(key==='size'){this.size=+document.getElementById('sl-size').value;document.getElementById('sl-size-v').textContent=this.size+'px'}
+        else if(key==='thresh'){this.thresh=+document.getElementById('sl-thresh').value;document.getElementById('sl-thresh-v').textContent=this.thresh+'px'}
+        else if(key==='hold'){this.hold=+document.getElementById('sl-hold').value;document.getElementById('sl-hold-v').textContent=this.hold+'ms'}
+        this.syncDiffHighlight();
+        this.refreshSummary();
+    },
+
+    syncDiffHighlight(){
+        let matched='';
+        for(const [k,p] of Object.entries(PRESETS)){
+            if(p.size===this.size && p.threshold===this.thresh && p.holdMs===this.hold){ matched=k; break; }
+        }
+        this.diff=matched;
+        document.querySelectorAll('#t-diff .pb').forEach(b=>{
+            const k=b.getAttribute('onclick').match(/'(\w+)'/)[1];
+            b.classList.toggle('on',k===matched);
+        });
+    },
+
+    refreshSummary(){
+        const diffLabel = this.diff ? I18N.t('m.'+this.diff) : I18N.t('m.custom').replace('…','');
+        if(this.challenge==='survival'){
+            document.getElementById('qs-mode-value').textContent=I18N.t('m.survival').split(' —')[0];
+            document.getElementById('qs-mode-sub').textContent=`${diffLabel} ${I18N.t('flk.start')} · ${I18N.t('flk.lives3')} · ${I18N.t('flk.sub.surv')}`;
+        } else {
+            document.getElementById('qs-mode-value').textContent =
+                this.time===0 ? I18N.t('m.endless') : this.time+(I18N.lang==='es'?' segundos':' seconds');
+            const recoil=this.recoilTrain?' · '+I18N.t('flk.recoil.short'):'';
+            document.getElementById('qs-mode-sub').textContent=`${diffLabel} · ${I18N.t('flk.sub.normal')}${recoil}`;
+        }
+    }
+};
+
+// Sismograph
+const Sismo={
+    canvas:null,ctx2d:null,data:[],maxLen:150,
+    init(){this.canvas=document.getElementById('sismo-canvas');this.ctx2d=this.canvas.getContext('2d');this.data=[]},
+    push(val){this.data.push(Math.min(val,10));if(this.data.length>this.maxLen)this.data.shift();this.draw()},
+    draw(){
+        const c=this.ctx2d,w=this.canvas.width,h=this.canvas.height;
+        c.clearRect(0,0,w,h);
+        if(this.data.length<2)return;
+        const step=w/this.maxLen;
+        c.beginPath();
+        c.strokeStyle=Game.isInside?
+            (Game.currentJitter<Game.cfg.threshold?'#00ff88':'#fbbf24'):
+            'rgba(90,90,110,0.3)';
+        c.lineWidth=1.5;
+        for(let i=0;i<this.data.length;i++){
+            const x=i*step;
+            const y=h-(this.data[i]/10)*h;
+            if(i===0)c.moveTo(x,y);else c.lineTo(x,y);
+        }
+        c.stroke();
+        const ty=h-(Game.cfg.threshold/10)*h;
+        c.setLineDash([4,4]);c.strokeStyle='rgba(0,255,136,0.2)';c.lineWidth=1;
+        c.beginPath();c.moveTo(0,ty);c.lineTo(w,ty);c.stroke();c.setLineDash([]);
+    }
+};
+
+// Game
+const Game={
+    active:false,mode:'',lastMode:'',
+    cfg:{size:60,threshold:1.5,holdMs:700,timed:true,duration:45,recoilTrain:false,mouseProfile:'valorant',mouseSensitivity:.35},
+    score:0,completed:0,timeLeft:0,elapsed:0,
+    lives:0,maxLives:0,
+    stabTimes:[],jitterSamples:[],
+    currentTgt:null,isInside:false,stabProgress:0,currentJitter:0,
+    tgtSpawnTime:0,tgtStabStart:0,recoilBase:null,recoilStartedAt:null,recoilSamples:[],
+    mouseX:0,mouseY:0,lastMX:0,lastMY:0,
+    timerI:null,frameId:null,elapsedI:null,tgtTimeout:null,
+
+    paused:false,qs:null,
+
+    launch(){
+        Snd.init();Sismo.init();
+        this.mode = UI.challenge === 'survival' ? 'survival' : 'normal';
+        this.lastMode=this.mode;
+        this.diff=UI.diff;
+        this.score=0;this.completed=0;this.elapsed=0;this.arrivalTimes=[];this.settleTimes=[];this.requiredHolds=[];this.pointerSpeed=0;this.pointerAt=0;
+        this.stabTimes=[];this.jitterSamples=[];this.recoilSamples=[];
+        this.isInside=false;this.stabProgress=0;this.currentJitter=0;
+        this.paused=false;
+
+        const mouse=BM.MouseSettings.get();
+        if(this.mode==='survival'){
+            this.cfg={size:60,threshold:2.0,holdMs:600,timed:false,duration:0,recoilTrain:UI.recoilTrain,...mouse};
+            this.lives=3;this.maxLives=3;
+        } else {
+            this.cfg={size:UI.size,threshold:UI.thresh,holdMs:UI.hold,timed:UI.time!==0,duration:UI.time,recoilTrain:UI.recoilTrain,...mouse};
+            this.lives=0;this.maxLives=0;
+        }
+
+        this.timeLeft=this.cfg.duration;this.active=true;
+
+        document.getElementById('setup').classList.add('hide');
+        document.getElementById('res').classList.add('hide');
+        document.getElementById('hud').classList.add('on');
+        document.getElementById('sismo-wrap').classList.add('on');
+        document.getElementById('arena').innerHTML='';
+        document.getElementById('h-tm').textContent=this.cfg.timed?this.timeLeft:'∞';
+        document.getElementById('h-tdot').style.background=this.mode==='survival'?'var(--miss)':'var(--accent)';
+        BM.drawLives('#h-lives',this.lives,this.maxLives,'sm');
+        if(this.qs && this.qs.btn) this.qs.btn.classList.add('on');
+        this.updateHUD();
+        this.spawnTarget();
+        if(this.cfg.timed)this.startTimer();
+        this.elapsedI=this.scheduler.setInterval(()=>{if(this.active&&!this.paused)this.elapsed=Math.floor(this.clock.now()/1000)},1000);
+        this.loop();
+    },
+
+    retry(){this.launch()},
+    toSetup(){
+        document.getElementById('res').classList.add('hide');
+        document.getElementById('setup').classList.remove('hide');
+        if(this.qs && this.qs.btn) this.qs.btn.classList.remove('on');
+    },
+
+    // ── Pause / Resume — freezes timers and the current target.
+    //    On resume, spawns a fresh target (avoids cheating mid-stabilize). ──
+    pause(){
+        if(!this.active || this.paused)return;
+        this.paused=true;
+        this.scheduler.clear(this.tgtTimeout);
+        this.scheduler.clear(this.timerI);
+        this.scheduler.clear(this.frameId);
+        this.isInside=false;this.stabProgress=0;
+        const t=this.currentTgt;
+        if(t&&t.parentNode)t.remove();
+        this.currentTgt=null;
+    },
+    resume(){
+        if(!this.active || !this.paused)return;
+        this.paused=false;
+        if(this.cfg.timed && this.timeLeft>0)this.startTimer();
+        this.spawnTarget();
+        this.loop();
+    },
+    exit(){
+        this.active=false;this.paused=false;
+        this.scheduler.clear(this.timerI);this.scheduler.clear(this.elapsedI);this.scheduler.clear(this.tgtTimeout);
+        this.scheduler.clear(this.frameId);
+    },
+
+    spawnTarget(){
+        if(!this.active)return;
+        const old=this.currentTgt;
+        this.currentTgt=null;this.isInside=false;
+        if(old&&old.parentNode)old.remove();
+        this.scheduler.clear(this.tgtTimeout);
+
+        if(this.mode==='survival'){
+            const sizeByTargets=60-this.completed*1.5;
+            const sizeByTime=60-this.elapsed*0.5;
+            this.cfg.size=Math.max(24,Math.min(sizeByTargets,sizeByTime));
+            if(this.completed>0&&this.completed%5===0){
+                this.cfg.threshold=Math.max(0.4,this.cfg.threshold-0.1);
+            }
+            this.cfg.holdMs=Math.min(1200,600+this.completed*8);
+        }
+
+        const t=document.createElement('div');t.className='tgt';
+        t.style.width=this.cfg.size+'px';t.style.height=this.cfg.size+'px';
+        t.innerHTML=`<div class="tgt-outer"><div class="tgt-core"></div></div>
+            <svg viewBox="0 0 100 100"><circle class="ring-bg" cx="50" cy="50" r="45"/><circle class="ring-fg" id="prog-ring" cx="50" cy="50" r="45"/></svg>`;
+
+        const pad=80;
+        const x=pad+Math.random()*(innerWidth-pad*2);
+        const y=pad+Math.random()*(innerHeight-pad*2);
+        t.style.left=x+'px';t.style.top=y+'px';
+
+        document.getElementById('arena').appendChild(t);
+        this.currentTgt=t;this.isInside=false;this.stabProgress=0;this.recoilBase={x,y};this.recoilStartedAt=null;
+        this.tgtSpawnTime=this.clock.now();this.tgtStabStart=0;this.firstArrival=null;
+
+        t.onmouseenter=()=>{if(!this.active||this.currentTgt!==t)return;this.isInside=true;if(this.firstArrival===null)this.firstArrival=this.clock.now();if(this.cfg.recoilTrain){this.recoilStartedAt=this.clock.now();t.classList.add('recoil');}t.classList.add('hover');this.tgtStabStart=this.clock.now()};
+        t.onmouseleave=()=>{if(this.currentTgt!==t)return;this.isInside=false;this.stabProgress=0;this.resetRecoil();if(t.parentNode){t.classList.remove('hover','locked')}this.updateRing(0)};
+
+        if(this.mode==='survival'){
+            const timeout=Math.max(2500,5000-this.completed*80-this.elapsed*15);
+            this.tgtTimeout=this.scheduler.setTimeout(()=>{
+                if(!this.active||this.currentTgt!==t)return;
+                this.loseLife();if(this.active)this.spawnTarget();
+            },timeout);
+        }
+    },
+
+    loop(){
+        if(!this.active || this.paused)return;
+
+        const dt=this.clock.step('motion');
+        this.updateRecoil();
+        const speed=this.clock.now()-this.pointerAt>80?0:(this.pointerSpeed||0);
+        this.currentJitter=speed/60; // UI threshold retains its 60 Hz reference scale.
+        Sismo.push(this.currentJitter);
+        const sv=document.getElementById('sismo-val');
+        if(sv){
+            sv.textContent=this.currentJitter.toFixed(1)+'px';
+            sv.style.color=this.isInside?(this.currentJitter<this.cfg.threshold?'var(--stab)':'var(--warn)'):'var(--t3)';
+        }
+
+        if(this.isInside&&this.currentTgt&&this.currentTgt.parentNode){
+            if(this.currentJitter<this.cfg.threshold){
+                this.stabProgress+=(dt*1000/this.cfg.holdMs)*100;
+                this.currentTgt.classList.remove('hover');
+                this.currentTgt.classList.add('locked');
+                if(this.stabProgress>=100-1e-8)this.completeTarget();
+            }else{
+                this.stabProgress=0;
+                this.currentTgt.classList.remove('locked');
+                this.currentTgt.classList.add('hover');
+            }
+            this.updateRing(this.stabProgress);
+            this.jitterSamples.push(this.currentJitter);
+        }
+
+        this.frameId=this.scheduler.requestAnimationFrame(this._boundLoop || (this._boundLoop=()=>this.loop()));
+    },
+
+    updateRing(pct){
+        const ring=document.getElementById('prog-ring');
+        if(ring)ring.style.strokeDashoffset=283-(pct/100)*283;
+    },
+
+    recoilScale(){
+        const p=MOUSE_PROFILES[this.cfg.mouseProfile]||MOUSE_PROFILES.valorant;
+        const ratio=(Number(this.cfg.mouseSensitivity)||p.default)/p.default;
+        return Math.min(2.1,Math.max(.45,ratio));
+    },
+
+    updateRecoil(){
+        const t=this.currentTgt;
+        if(!this.cfg.recoilTrain||this.recoilStartedAt===null||!this.recoilBase||!t||!t.parentNode)return;
+        const age=(this.clock.now()-this.recoilStartedAt)/1000,scale=this.recoilScale();
+        const ramp=Math.min(1,age/.32),amplitude=this.cfg.size*.32*scale*ramp;
+        const x=this.recoilBase.x+Math.sin(age*13)*amplitude*.33+Math.sin(age*25)*amplitude*.08;
+        const y=this.recoilBase.y-amplitude*(.75+age*.18)+Math.sin(age*18)*amplitude*.1;
+        const pad=this.cfg.size/2+10;
+        const clampedX=Math.max(pad,Math.min(innerWidth-pad,x)),clampedY=Math.max(pad,Math.min(innerHeight-pad,y));
+        t.style.left=clampedX+'px';t.style.top=clampedY+'px';
+        this.recoilSamples.push(Math.hypot(clampedX-this.recoilBase.x,clampedY-this.recoilBase.y));
+    },
+
+    resetRecoil(){
+        const t=this.currentTgt;
+        if(t&&this.recoilBase){t.style.left=this.recoilBase.x+'px';t.style.top=this.recoilBase.y+'px';t.classList.remove('recoil');}
+        this.recoilStartedAt=null;
+    },
+
+    completeTarget(){
+        if(!this.currentTgt||!this.currentTgt.parentNode)return;
+        const now=this.clock.now();
+        const stabTime=Math.round(now-this.tgtSpawnTime);
+        this.stabTimes.push(stabTime);
+        this.arrivalTimes.push(Math.max(0,(this.firstArrival??now)-this.tgtSpawnTime));
+        this.settleTimes.push(Math.max(0,now-(this.firstArrival??now)-this.cfg.holdMs));
+        this.requiredHolds.push(this.cfg.holdMs);
+        this.completed++;
+
+        const bonus=Math.max(0,Math.round(300-stabTime/10));
+        this.score+=150+bonus;
+
+        this.scheduler.clear(this.tgtTimeout);
+        Snd.hit();
+
+        const rect=this.currentTgt.getBoundingClientRect();
+        const cx=rect.left+rect.width/2,cy=rect.top+rect.height/2;
+        this.currentTgt.remove();this.currentTgt=null;this.isInside=false;this.recoilStartedAt=null;
+
+        const b=document.createElement('div');b.className='complete-burst';
+        b.style.left=cx+'px';b.style.top=cy+'px';
+        document.getElementById('arena').appendChild(b);this.scheduler.setTimeout(()=>b.remove(),350);
+
+        const pop=document.createElement('div');pop.className='time-pop';
+        pop.textContent=stabTime+'ms';
+        pop.style.left=cx+'px';pop.style.top=(cy-10)+'px';
+        pop.style.color=stabTime<500?'var(--stab)':stabTime<1000?'var(--warn)':'var(--accent)';
+        document.getElementById('arena').appendChild(pop);this.scheduler.setTimeout(()=>pop.remove(),700);
+
+        if(this.mode==='survival'&&this.completed%15===0&&this.lives<this.maxLives){
+            this.lives++;BM.drawLives('#h-lives',this.lives,this.maxLives,'sm');Snd.life();
+        }
+
+        this.updateHUD();
+        this.scheduler.setTimeout(()=>{if(this.active)this.spawnTarget()},250);
+    },
+
+    loseLife(){
+        if(this.lives<=0)return;
+        this.lives--;BM.drawLives('#h-lives',this.lives,this.maxLives,'sm');Snd.fail();
+        document.getElementById('arena').style.boxShadow='inset 0 0 80px rgba(255,34,85,.3)';
+        this.scheduler.setTimeout(()=>document.getElementById('arena').style.boxShadow='none',200);
+        if(this.lives<=0)this.end();
+    },
+
+    updateHUD(){
+        document.getElementById('h-sc').textContent=this.score;
+        document.getElementById('h-tgts').textContent=this.completed;
+        if(this.cfg.timed)document.getElementById('h-tm').textContent=this.timeLeft;
+    },
+
+    startTimer(){this.timerI=this.scheduler.setInterval(()=>{this.timeLeft=Math.max(0,Math.ceil(this.sessionDuration-this.clock.now()/1000-(this.timePenalty||0)));this.updateHUD();if(this.timeLeft<=0)this.end()},1000)},
+
+    end(){
+        this.active=false;this.currentTgt=null;this.isInside=false;
+        this.scheduler.clear(this.timerI);this.scheduler.clear(this.elapsedI);this.scheduler.clear(this.tgtTimeout);
+        this.scheduler.clear(this.frameId);
+        document.getElementById('arena').innerHTML='';
+        document.getElementById('hud').classList.remove('on');
+        document.getElementById('sismo-wrap').classList.remove('on');
+
+        const avg=this.stabTimes.length>0?Math.round(this.stabTimes.reduce((a,b)=>a+b,0)/this.stabTimes.length):0;
+        const best=this.stabTimes.length>0?Math.min(...this.stabTimes):0;
+        const worst=this.stabTimes.length>0?Math.max(...this.stabTimes):0;
+        const avgJitter=this.jitterSamples.length>0?(this.jitterSamples.reduce((a,b)=>a+b,0)/this.jitterSamples.length).toFixed(1):0;
+        if(this.qs && this.qs.btn) this.qs.btn.classList.remove('on');
+
+        document.getElementById('r-mode').textContent=(this.mode==='survival'?I18N.t('flk.survover'):I18N.t('m.complete'));
+        // Primary metric: avg stabilize time (lower is better)
+        document.getElementById('r-primary').textContent=avg;
+
+        // ── Persist BEFORE comparison; bucket by difficulty (or survival) ──
+        const bucket = this.mode==='survival' ? 'surv' : (this.diff || 'custom');
+        const bestKey = 'stab_' + bucket;
+        const priorBest = Store.getBest(MODULE, bestKey);  // lower is better
+
+        Store.saveSession(MODULE,{
+            avgArrival:BM.mean(this.arrivalTimes), avgSettle:BM.mean(this.settleTimes), avgHold:BM.mean(this.requiredHolds),
+            mode:this.mode, diff:this.diff, avgStab:avg,
+            completed:this.completed, avg, best, worst,
+            avgJitter:parseFloat(avgJitter), score:this.score,
+            recoilTrain:!!this.cfg.recoilTrain, mouseProfile:this.cfg.mouseProfile, mouseSensitivity:this.cfg.mouseSensitivity,
+            avgRecoil: this.recoilSamples.length?Number((this.recoilSamples.reduce((a,b)=>a+b,0)/this.recoilSamples.length).toFixed(1)):0
+        });
+        if(this.completed>0) Store.saveBest(MODULE, bestKey, avg, false);  // lower better
+        Store.saveBest(MODULE, 'score', this.score, true);  // legacy
+
+        // ── Comparison line ──
+        const cmpEl=document.getElementById('r-compare');
+        const bucketLabel = this.mode==='survival' ? (I18N.lang==='es'?'supervivencia':'survival') : (this.diff ? I18N.t('m.'+this.diff).toLowerCase() : I18N.t('m.custom').replace('…','').toLowerCase());
+        if(this.completed===0){
+            cmpEl.className='res-compare worse';
+            cmpEl.innerHTML='<span class="ar">—</span> ' + I18N.t('flk.notargets');
+        } else if(priorBest===null||priorBest===undefined||priorBest===0){
+            cmpEl.className='res-compare record';
+            cmpEl.innerHTML=`<span class="ar">★</span> ${I18N.lang==='es'?'Primera sesión '+bucketLabel+' — tu base':'First '+bucketLabel+' session — your baseline'}`;
+        } else {
+            const diff = avg - priorBest;  // negative = faster = better
+            if(diff<0){
+                cmpEl.className='res-compare record';
+                cmpEl.innerHTML=`<span class="ar">▲</span> ${I18N.t('m.res.newbest')} · ${Math.abs(diff)}ms ${I18N.t('flk.faster')}`;
+            } else if(diff===0){
+                cmpEl.className='res-compare better';
+                cmpEl.innerHTML=`<span class="ar">=</span> ${I18N.t('m.res.matched')} (${priorBest}ms)`;
+            } else {
+                cmpEl.className='res-compare worse';
+                cmpEl.innerHTML=`<span class="ar">▾</span> ${diff}ms ${I18N.t('flk.slower')} (${priorBest}ms)`;
+            }
+        }
+
+        // ── Evolution (same bucket) ──
+        this.renderEvolution(bucket, avg);
+
+        // ── This-session per-target timeline (kept from original) ──
+        const chart=document.getElementById('r-chart');chart.innerHTML='';
+        const maxT=Math.max(...this.stabTimes,1);
+        this.stabTimes.forEach((t,i)=>{
+            const bar=document.createElement('div');bar.className='mc-bar';
+            if(t<500)bar.classList.add('fast');
+            else if(t>1500)bar.classList.add('slow');
+            bar.style.height='0%';
+            chart.appendChild(bar);
+            this.scheduler.setTimeout(()=>{bar.style.height=(t/maxT*100)+'%'},30+i*20);
+        });
+
+        // ── Details ──
+        document.getElementById('r-details').innerHTML =
+            `<span>${I18N.t('flk.d.completed')} <b>${this.completed}</b></span>` +
+            `<span>${I18N.t('m.res.best')} <b>${best}ms</b></span>` +
+            `<span>${I18N.t('flk.d.worst')} <b>${worst}ms</b></span>` +
+            `<span>${I18N.t('flk.d.avgjitter')} <b>${avgJitter}px</b></span>`;
+
+        document.getElementById('res').classList.remove('hide');
+    },
+
+    renderEvolution(bucket, currentAvg){
+        const bars=document.getElementById('r-evo-bars');
+        const bestSpan=document.getElementById('r-evo-best');
+        const all=Store.getSessions(MODULE)||[];
+        const sameKind=all.filter(s=>{
+            const b = s.mode==='survival' ? 'surv' : (s.diff || 'custom');
+            return b===bucket && typeof s.avgStab==='number' && s.avgStab>0;
+        }).slice(-12);
+        if(sameKind.length===0){
+            bars.innerHTML=`<div class="res-evo-empty">${I18N.t('flk.evoempty')}</div>`;
+            bestSpan.textContent='';
+            return;
+        }
+        // Lower is better, so the chart shows inverted height (faster = taller)
+        const maxAvg=Math.max(...sameKind.map(s=>s.avgStab),currentAvg,1);
+        const minAvg=Math.min(...sameKind.map(s=>s.avgStab),currentAvg);
+        bestSpan.textContent=I18N.t('m.res.best')+' '+minAvg+'ms';
+        bars.innerHTML='';
+        sameKind.forEach((s,i)=>{
+            const bar=document.createElement('div');
+            bar.className='res-evo-bar'+(i===sameKind.length-1?' latest':'');
+            bar.style.height='0%';
+            bar.title=s.avgStab+'ms';
+            bars.appendChild(bar);
+            // Invert: faster (lower ms) = taller bar
+            const h=(1 - (s.avgStab - minAvg)/(maxAvg - minAvg || 1)) * 80 + 20;
+            this.scheduler.requestAnimationFrame(()=>{ bar.style.height=h+'%'; });
+        });
+    }
+};
+
+window.addEventListener('mousemove',e=>{const now=Game.clock?.now()||0,dt=now-(Game.pointerAt||0);if(dt>0)Game.pointerSpeed=Math.hypot(e.clientX-Game.mouseX,e.clientY-Game.mouseY)/dt*1000;Game.pointerAt=now;Game.mouseX=e.clientX;Game.mouseY=e.clientY});
+if(!Snd.on) document.getElementById('snd-btn').textContent='♪ OFF';
+
+// Initialize difficulty preset (medium) + summary
+UI.setDiff('medium', document.querySelector('#t-diff .pb.on'));
+UI.syncRecoilToggle();
+UI.refreshSummary();
+
+// Re-render dynamic text on language change (static data-i18n auto-updates)
+window.addEventListener('langchange', () => {
+    UI.refreshSummary();
+    UI.setChallenge(UI.challenge, document.querySelector('#t-challenge .pb.on'));
+    UI.syncRecoilToggle();
+});
+
+// Quick switcher — pause + module nav (this module never had it before)
+BM.attachTraining({module:MODULE,game:Game,ui:UI,start:'launch',finish:'end'});
+Game.qs = BM.mountQuickSwitcher({
+    current: MODULE,
+    onPause:  () => Game.pause(),
+    onResume: () => Game.resume(),
+    onExit:   () => Game.exit()
+});
+</script>
+</body>
+</html>

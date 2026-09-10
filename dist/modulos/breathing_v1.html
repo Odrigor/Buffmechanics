@@ -1,0 +1,876 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BuffMechanics | Breathing</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' fill='%2322d3ee'/%3E%3Ctext x='50%25' y='54%25' text-anchor='middle' dominant-baseline='middle' font-family='monospace' font-size='40' font-weight='700' fill='%23ffffff'%3EB%3C/text%3E%3Crect x='2' y='2' width='60' height='60' fill='none' stroke='%23ffffff' stroke-width='3'/%3E%3C/svg%3E">
+    <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="../assets/shared.css">
+    <style>
+        /* Breathing — cyan identity (#22d3ee), AMB category.
+           Wellness utility module — no scoring, no anti-abuse pause semantics,
+           no survival/standard/custom tabs. Protocols are categorically distinct
+           (different parasympathetic targets), so mode-cards instead of tabs.
+           See MANIFIESTO.md §3.1 (mode-cards) and the AMB category notes. */
+        :root{
+            --accent:#22d3ee;
+            --accent-dim:rgba(34,211,238,.12);
+            --calm:#67e8f9;
+        }
+        body{height:100vh;overflow:hidden;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px}
+
+        /* ── Header ── */
+        .head{
+            position:fixed;top:24px;left:0;right:0;
+            display:flex;align-items:center;justify-content:center;gap:14px;
+            pointer-events:none;
+        }
+        .head-tag{
+            font-family:'Space Mono',monospace;
+            font-size:9px;letter-spacing:.16em;color:var(--t3);text-transform:uppercase;
+        }
+        .head-tag b{color:var(--accent)}
+
+        /* ── Setup screen ── */
+        .setup-wrap{
+            display:flex;flex-direction:column;align-items:center;
+            max-width:760px;width:100%;gap:6px;
+        }
+        .setup-wrap.hide{display:none}
+
+        .setup-logo{
+            font-family:'Space Mono',monospace;
+            font-size:10px;font-weight:700;color:var(--accent);letter-spacing:.18em;
+            border:2px solid var(--accent);padding:6px 14px;margin-bottom:18px;
+        }
+        .setup-title{font-size:42px;font-weight:700;letter-spacing:-1px;text-align:center;line-height:1}
+        .setup-title em{color:var(--accent);font-style:normal}
+        .setup-sub{
+            font-family:'Space Mono',monospace;
+            font-size:10px;color:var(--t2);letter-spacing:.2em;text-transform:uppercase;
+            margin-top:8px;
+        }
+
+        /* Protocol pickers (mode-cards) */
+        .proto-row, .dur-row{
+            display:flex;gap:10px;max-width:680px;width:100%;
+            margin-top:20px;
+        }
+        .pcard{
+            flex:1;background:var(--sf);border:1px solid var(--bd);
+            padding:18px 12px;cursor:pointer;text-align:center;
+            transition:all .25s;position:relative;
+        }
+        .pcard:hover{border-color:var(--t2);transform:translateY(-3px)}
+        .pcard.sel{border-color:var(--accent);background:var(--accent-dim)}
+        .pcard.sel .pc-pattern{color:var(--accent)}
+        .pc-pattern{
+            font-family:'Space Mono',monospace;
+            font-size:22px;font-weight:700;letter-spacing:.1em;
+            color:var(--t1);margin-bottom:6px;
+        }
+        .pc-name{
+            font-size:13px;font-weight:700;letter-spacing:.06em;
+            color:var(--t1);margin-bottom:3px;
+        }
+        .pc-desc{
+            font-family:'Space Mono',monospace;
+            font-size:9px;color:var(--t2);line-height:1.5;
+        }
+
+        .dur-row{margin-top:14px;max-width:520px}
+        .pcard.small{padding:13px 10px}
+        .pcard.small .pc-pattern{font-size:18px;margin-bottom:2px}
+        .pcard.small .pc-name{font-size:11px;margin-bottom:0}
+
+        /* Sound cue selector */
+        .cue-row{
+            display:flex;gap:8px;margin-top:14px;
+            max-width:520px;width:100%;align-items:center;
+            justify-content:center;
+        }
+        .cue-label{
+            font-family:'Space Mono',monospace;
+            font-size:9px;color:var(--t3);letter-spacing:.14em;text-transform:uppercase;
+            margin-right:6px;
+        }
+        .cue-btn{
+            flex:0 0 auto;background:var(--sf);border:1px solid var(--bd);
+            color:var(--t2);font-family:'Rajdhani',sans-serif;
+            font-size:12px;font-weight:700;letter-spacing:.06em;
+            padding:6px 14px;cursor:pointer;transition:all .15s;
+        }
+        .cue-btn:hover{border-color:var(--t2);color:var(--t1)}
+        .cue-btn.on{border-color:var(--accent);color:var(--accent);background:var(--accent-dim)}
+
+        .gobtn{
+            max-width:340px;padding:14px 64px;width:auto;margin-top:24px;
+        }
+
+        /* ── Session screen ── */
+        .session{
+            display:none;flex-direction:column;align-items:center;
+            gap:36px;
+        }
+        .session.on{display:flex}
+
+        /* Phase label above the box */
+        .phase-info{
+            text-align:center;
+            font-family:'Space Mono',monospace;
+            min-height:42px;
+        }
+        .phase-label{
+            font-size:11px;letter-spacing:.32em;color:var(--t3);
+            text-transform:uppercase;line-height:1;
+        }
+        .phase-text{
+            font-size:34px;font-weight:700;letter-spacing:.16em;
+            color:var(--accent);margin-top:6px;line-height:1;
+            transition:color .4s;
+            font-family:'Rajdhani',sans-serif;
+        }
+        .phase-text.hold{color:var(--t1)}
+
+        /* ═══ Neon square — a glowing sphere travels the perimeter ═══ */
+        .box-stage{
+            position:relative;
+            width:380px;height:380px;
+            display:flex;align-items:center;justify-content:center;
+        }
+        /* The SVG holds: a faint base square, a soft phase fill, corner
+           accents, and a single glowing sphere that moves along the
+           perimeter. A sphere (a point) doesn't deform at corners the way a
+           stroke dash does — it just travels smoothly around. */
+        .neon-svg{
+            position:absolute;
+            width:380px;height:380px;
+            overflow:visible;
+        }
+        /* Faint always-present square outline */
+        .neon-base{
+            fill:none;
+            stroke:var(--bd);
+            stroke-width:2;
+        }
+        /* The path the sphere has traced glows faintly behind it (a subtle
+           "trail" so the active edge reads as lit). */
+        .neon-trail{
+            fill:none;
+            stroke:var(--accent);
+            stroke-width:2;
+            opacity:.35;
+            stroke-linecap:round;
+            stroke-dasharray:0 1000;
+        }
+        /* Soft inner fill that breathes with the phase (subtle) */
+        .neon-fill{
+            fill:var(--accent);
+            opacity:0;
+            transition:opacity 1.2s ease;
+        }
+        .neon-fill.lit{ opacity:.05; }
+        /* The travelling sphere of light. The glow comes from the SVG filter;
+           the gentle palpitation is a CSS scale+opacity pulse on the group. */
+        .neon-orb{
+            filter:url(#orb-glow);
+            animation:orbPulse 2.6s ease-in-out infinite;
+            transform-box:fill-box;
+            transform-origin:center;
+        }
+        .orb-core{ fill:#fff; }
+        .orb-halo{ fill:var(--accent); opacity:.6; }
+        /* Gentle palpitation — the sphere breathes a little as it travels */
+        @keyframes orbPulse{
+            0%,100%{ opacity:.9;  }
+            50%{     opacity:1;   }
+        }
+        /* Corner dots — give the square a finished, anchored look */
+        .neon-corner{
+            fill:var(--accent);
+            opacity:.55;
+        }
+
+        /* Big seconds counter inside the square */
+        .seconds-counter{
+            position:relative;z-index:2;
+            font-family:'Space Mono',monospace;
+            font-size:62px;font-weight:700;color:var(--t1);
+            line-height:1;
+            user-select:none;
+            text-shadow:0 0 24px var(--accent-dim);
+        }
+
+        /* Cycle indicator below */
+        .cycle-info{
+            font-family:'Space Mono',monospace;
+            font-size:10px;letter-spacing:.16em;color:var(--t3);
+            text-transform:uppercase;
+        }
+        .cycle-info b{color:var(--t1);font-weight:700}
+
+        /* Session controls */
+        .sess-controls{display:flex;gap:10px}
+        .sess-btn{
+            background:var(--sf);border:1px solid var(--bd);
+            color:var(--t2);
+            font-family:'Rajdhani',sans-serif;font-size:12px;font-weight:700;
+            letter-spacing:.14em;padding:9px 22px;cursor:pointer;
+            transition:all .2s;text-transform:uppercase;
+        }
+        .sess-btn:hover{border-color:var(--t2);color:var(--t1)}
+        .sess-btn.primary{
+            background:var(--accent);color:var(--bg);border-color:var(--accent);
+        }
+        .sess-btn.primary:hover{background:#fff;border-color:#fff;color:var(--bg)}
+
+        /* ── End screen ── */
+        .end-screen{
+            display:none;flex-direction:column;align-items:center;
+            text-align:center;gap:8px;
+            opacity:0;transition:opacity .8s;
+        }
+        .end-screen.on{display:flex;opacity:1}
+        .end-tag{
+            font-family:'Space Mono',monospace;
+            font-size:10px;letter-spacing:.22em;color:var(--t2);
+            text-transform:uppercase;margin-bottom:8px;
+        }
+        .end-title{
+            font-size:38px;font-weight:700;color:var(--accent);
+            letter-spacing:.02em;line-height:1;
+        }
+        .end-sub{
+            font-family:'Space Mono',monospace;
+            font-size:11px;color:var(--t2);letter-spacing:.12em;
+            margin-top:10px;
+        }
+        .end-stats{
+            display:flex;gap:32px;margin:24px 0;
+            font-family:'Space Mono',monospace;
+        }
+        .es-cell{display:flex;flex-direction:column;align-items:center;gap:2px}
+        .es-v{font-size:24px;font-weight:700;color:var(--t1);line-height:1;font-family:'Rajdhani',sans-serif}
+        .es-l{font-size:8px;color:var(--t3);letter-spacing:.16em;text-transform:uppercase}
+        .end-buttons{display:flex;gap:10px;margin-top:20px}
+
+        /* Back button (visible during setup) */
+        .back-link{
+            position:fixed;top:24px;left:24px;z-index:120;
+            background:none;border:1px solid var(--bd);color:var(--t2);
+            font-family:'Rajdhani',sans-serif;font-size:11px;font-weight:700;
+            letter-spacing:.14em;padding:7px 16px;cursor:pointer;
+            transition:all .2s;
+        }
+        .back-link:hover{border-color:var(--t2);color:var(--t1)}
+    </style>
+<link rel="stylesheet" href="../assets/experience.css">
+<link rel="stylesheet" href="../assets/workspace.css">
+</head>
+<body>
+
+<div class="head">
+    <div class="head-tag">MODULE <b>A-02</b> · BREATHING</div>
+</div>
+
+<button class="back-link" id="back-link" onmouseenter="Snd.tick(660)" onclick="BM.backToHome()">← BACK</button>
+
+<!-- ═══ SETUP ═══ -->
+<div class="setup-wrap" id="setup">
+    <div class="setup-logo">BRT</div>
+    <div class="setup-title">BOX <em>BREATHING</em></div>
+    <div class="setup-sub">Paced breathing guide</div>
+
+    <div class="proto-row" id="proto-row"></div>
+    <div class="dur-row" id="dur-row"></div>
+
+    <div class="cue-row">
+        <span class="cue-label">Sound cues</span>
+        <button class="cue-btn on" data-cue="tones" onclick="UI.setCue('tones')">Tones</button>
+        <button class="cue-btn" data-cue="silent" onclick="UI.setCue('silent')">Silent</button>
+    </div>
+
+    <button class="gobtn" onclick="Session.start()">BEGIN</button>
+    <div class="hint" style="margin-top:14px">Sit upright. Loosen jaw. Breathe through the nose if possible.</div>
+</div>
+
+<!-- ═══ SESSION ═══ -->
+<div class="session" id="session">
+    <div class="phase-info">
+        <div class="phase-label" id="phase-label">— PHASE —</div>
+        <div class="phase-text" id="phase-text">READY</div>
+    </div>
+
+    <div class="box-stage">
+        <svg class="neon-svg" viewBox="0 0 380 380" id="neon-svg">
+            <defs>
+                <!-- Orb glow: blur the sphere and composite it back, doubled
+                     for a stronger halo -->
+                <filter id="orb-glow" x="-150%" y="-150%" width="400%" height="400%">
+                    <feGaussianBlur stdDeviation="6" result="blur"/>
+                    <feMerge>
+                        <feMergeNode in="blur"/>
+                        <feMergeNode in="blur"/>
+                        <feMergeNode in="SourceGraphic"/>
+                    </feMerge>
+                </filter>
+            </defs>
+
+            <!-- Subtle phase fill -->
+            <rect class="neon-fill" id="neon-fill" x="52" y="52" width="276" height="276" rx="4"/>
+
+            <!-- Faint base square (always visible) -->
+            <rect class="neon-base" x="52" y="52" width="276" height="276" rx="4"/>
+
+            <!-- Trail: the edge the orb is currently tracing glows faintly.
+                 Path starts at the top-left corner and runs clockwise so each
+                 edge maps cleanly to a 250-unit block on pathLength=1000:
+                 top 0–250, right 250–500, bottom 500–750, left 750–1000. -->
+            <path class="neon-trail" id="neon-trail"
+                  d="M52,52 L328,52 L328,328 L52,328 L52,52"
+                  pathLength="1000"
+                  stroke-dasharray="0 1000"
+                  stroke-dashoffset="0"/>
+
+            <!-- The travelling sphere of light. Positioned by JS each tick.
+                 A bright white core with a colored halo around it. -->
+            <g class="neon-orb" id="neon-orb">
+                <circle class="orb-halo" r="9" cx="0" cy="0"/>
+                <circle class="orb-core" r="4.5" cx="0" cy="0"/>
+            </g>
+
+            <!-- Corner accents -->
+            <circle class="neon-corner" cx="52"  cy="52"  r="4"/>
+            <circle class="neon-corner" cx="328" cy="52"  r="4"/>
+            <circle class="neon-corner" cx="328" cy="328" r="4"/>
+            <circle class="neon-corner" cx="52"  cy="328" r="4"/>
+        </svg>
+        <div class="seconds-counter" id="sec-counter">0</div>
+    </div>
+
+    <div class="cycle-info">CYCLE <b id="cyc-num">1</b> / <b id="cyc-total">5</b></div>
+
+    <div class="sess-controls">
+        <button class="sess-btn" onclick="Session.cancel()">STOP</button>
+        <button class="sess-btn primary" id="pause-btn" onclick="Session.togglePause()">PAUSE</button>
+    </div>
+</div>
+
+<!-- ═══ END ═══ -->
+<div class="end-screen" id="end">
+    <div class="end-tag">SESSION COMPLETE</div>
+    <div class="end-title" id="end-title">READY</div>
+    <div class="end-sub" id="end-sub">Breathing session complete</div>
+    <div class="end-stats">
+        <div class="es-cell"><div class="es-v" id="end-cycles">0</div><div class="es-l">Cycles</div></div>
+        <div class="es-cell"><div class="es-v" id="end-time">0:00</div><div class="es-l">Duration</div></div>
+        <div class="es-cell"><div class="es-v" id="end-proto">—</div><div class="es-l">Protocol</div></div>
+    </div>
+    <div class="end-buttons">
+        <button class="sess-btn" onclick="location.href='../index.html'">EXIT</button>
+        <button class="sess-btn" onclick="Session.toSetup()">MENU</button>
+        <button class="sess-btn primary" onclick="Session.again()">AGAIN</button>
+    </div>
+</div>
+
+<script src="../assets/i18n.js"></script>
+<script src="../assets/shared.js"></script>
+<script src="../assets/history.js"></script>
+<script src="../assets/training-core.js"></script>
+<script src="../assets/routine.js"></script>
+<script src="../assets/experience.js"></script>
+<script>
+const MODULE = 'breathing';
+
+// ═══ PROTOCOLS — categorically distinct breathing techniques ═══
+//
+// Each protocol is [inhale, hold-in, exhale, hold-out] in seconds.
+// All have research backing for specific autonomic targets:
+//
+//   Box (4-4-4-4)     · Navy SEAL training. Balanced sympathetic/parasympathetic
+//                       regulation. Most studied for tactical stress.
+//   Calm (4-7-8)      · Dr. Andrew Weil's protocol. Strong vagal activation
+//                       via long exhale. Used for acute anxiety and pre-sleep.
+//   Coherence (6-0-6-0) · Resonant frequency breathing at ~6 breaths/min.
+//                       Maximizes heart rate variability (HRV).
+//   Quick (4-2-4-2)   · Shorter cycle. For micro-resets between rounds when
+//                       you can't afford the full 4-4-4-4 ritual.
+
+const PROTOCOLS = [
+    {id:'box',       name:'Box',       pattern:[4,4,4,4], desc:'Four equal phases, four seconds each.'},
+    {id:'calm',      name:'4-7-8',     pattern:[4,7,8,0], desc:'Inhale 4 s, hold 7 s, exhale 8 s.'},
+    {id:'coherence', name:'Coherence', pattern:[6,0,6,0], desc:'Inhale and exhale for six seconds.'},
+    {id:'quick',     name:'Quick',     pattern:[4,2,4,2], desc:'Short holds of two seconds.'}
+];
+
+const DURATIONS = [
+    {id:'3',   cycles:3,        label:'3 cycles',  desc:'Quick reset'},
+    {id:'5',   cycles:5,        label:'5 cycles',  desc:'Standard'},
+    {id:'10',  cycles:10,       label:'10 cycles', desc:'Deep settle'},
+    {id:'inf', cycles:Infinity, label:'Open',      desc:'Until you stop'}
+];
+
+// ═══ UI ═══
+const UI = {
+    protoId: 'box',
+    durId: '5',
+    cue: 'tones',
+
+    pickProto(id){
+        this.protoId = id;
+        document.querySelectorAll('.proto-row .pcard').forEach(c => {
+            c.classList.toggle('sel', c.dataset.proto === id);
+        });
+        CueSnd.softClick();
+    },
+    pickDur(id){
+        this.durId = id;
+        document.querySelectorAll('.dur-row .pcard').forEach(c => {
+            c.classList.toggle('sel', c.dataset.dur === id);
+        });
+        CueSnd.softClick();
+    },
+    setCue(c){
+        this.cue = c;
+        document.querySelectorAll('.cue-btn').forEach(b => {
+            b.classList.toggle('on', b.dataset.cue === c);
+        });
+        CueSnd.softClick();
+    },
+
+    buildSetup(){
+        const proto = document.getElementById('proto-row');proto.replaceChildren();
+        PROTOCOLS.forEach(p => {
+            const el = document.createElement('div');
+            el.className = 'pcard' + (p.id === this.protoId ? ' sel' : '');
+            el.dataset.proto = p.id;
+            el.innerHTML = `
+                <div class="pc-pattern">${p.pattern.join('-')}</div>
+                <div class="pc-name">${p.name.toUpperCase()}</div>
+                <div class="pc-desc">${p.desc}</div>
+            `;
+            el.addEventListener('mouseenter', () => CueSnd.softClick());
+            el.addEventListener('click', () => this.pickProto(p.id));
+            proto.appendChild(el);
+        });
+
+        const dur = document.getElementById('dur-row');dur.replaceChildren();
+        DURATIONS.forEach(d => {
+            const el = document.createElement('div');
+            el.className = 'pcard small' + (d.id === this.durId ? ' sel' : '');
+            el.dataset.dur = d.id;
+            el.innerHTML = `
+                <div class="pc-pattern">${d.cycles === Infinity ? '∞' : d.cycles}</div>
+                <div class="pc-name">${d.label.toUpperCase()}</div>
+            `;
+            el.addEventListener('mouseenter', () => CueSnd.softClick());
+            el.addEventListener('click', () => this.pickDur(d.id));
+            dur.appendChild(el);
+        });
+    }
+};
+
+// ═══ Breathing audio cues — soft sine tones, dedicated AudioContext ═══
+//
+// We use our own AudioContext rather than shared.js's Snd because:
+//   (a) we want a different volume balance — these tones should be quieter
+//       and softer than UI feedback ticks
+//   (b) the tones are sustained (not one-shot like wood-block) — different
+//       envelope shape
+//   (c) we also host the soft-click UI sound for this module, because the
+//       wellness context calls for a more relaxed UI feedback than the
+//       wood-block default elsewhere
+const CueSnd = {
+    ctx: null, master: null,
+    init(){
+        if(this.ctx) return;
+        this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+        this.master = this.ctx.createGain();
+        this.master.gain.value = 0.18;
+        this.master.connect(this.ctx.destination);
+    },
+    // Soft sine bell with long, slow envelope. Different pitch per phase
+    // so phases are sonically distinguishable.
+    phaseBell(freq){
+        if(UI.cue === 'silent') return;
+        if(!this.ctx) this.init();
+        if(this.ctx.state === 'suspended') this.ctx.resume();
+        const t = this.ctx.currentTime;
+        // Two-oscillator soft bell with slight detune
+        [0, 1.5].forEach((det, i) => {
+            const o = this.ctx.createOscillator();
+            o.type = 'sine';
+            o.frequency.value = freq + det;
+            const g = this.ctx.createGain();
+            g.gain.setValueAtTime(0, t);
+            g.gain.linearRampToValueAtTime(.07 * (i === 0 ? 1 : .4), t + .04);
+            g.gain.exponentialRampToValueAtTime(.001, t + .6);
+            o.connect(g); g.connect(this.master);
+            o.start(t); o.stop(t + .65);
+        });
+    },
+
+    // Soft dry click — used on hover/select in setup. Two layers:
+    //   1. Short noise burst (5ms) — gives the "click" attack
+    //   2. Very short sine pop (8ms) — adds gentle body
+    // Tuned to be percussive but not aggressive. Less jarring than the
+    // global wood-block, more relaxing for the breathing context.
+    softClick(){
+        if(!this.ctx) this.init();
+        if(this.ctx.state === 'suspended') this.ctx.resume();
+        const t = this.ctx.currentTime;
+        const ctx = this.ctx;
+
+        // Layer 1 — short filtered noise burst
+        const len = Math.floor(ctx.sampleRate * .005);
+        const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+        const d = buf.getChannelData(0);
+        for(let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+        const noise = ctx.createBufferSource();
+        noise.buffer = buf;
+        const bp = ctx.createBiquadFilter();
+        bp.type = 'bandpass'; bp.frequency.value = 1800; bp.Q.value = 2.5;
+        const ng = ctx.createGain();
+        ng.gain.setValueAtTime(.06, t);
+        ng.gain.exponentialRampToValueAtTime(.001, t + .006);
+        noise.connect(bp); bp.connect(ng); ng.connect(this.master);
+        noise.start(t); noise.stop(t + .008);
+
+        // Layer 2 — short sine pop for body
+        const o = ctx.createOscillator();
+        o.type = 'sine';
+        o.frequency.setValueAtTime(1200, t);
+        o.frequency.exponentialRampToValueAtTime(900, t + .008);
+        const og = ctx.createGain();
+        og.gain.setValueAtTime(.05, t);
+        og.gain.exponentialRampToValueAtTime(.001, t + .012);
+        o.connect(og); og.connect(this.master);
+        o.start(t); o.stop(t + .015);
+    }
+};
+
+// ═══ SESSION ═══
+//
+// Phase index: 0 = inhale, 1 = hold-in, 2 = exhale, 3 = hold-out
+// A "cycle" is one full traversal of all 4 phases.
+//
+// Tick model: setInterval updates from a high-resolution clock. The neon
+// light position + seconds counter come from this clock. Phase transitions
+// are computed from the elapsed-within-phase time.
+//
+// Visual: a fixed square with a neon light that travels ONE edge per phase,
+// clockwise. Inhale lights the top edge, hold the right, exhale the bottom,
+// hold the left — so a full breath cycle = one lap of the square. A gentle
+// CSS pulse on the neon gives the "palpitation". The inner fill is lit during
+// inhale/hold-in and fades during exhale/hold-out, echoing the breath.
+
+const Session = {
+    active: false,
+    paused: false,
+    proto: null,
+    targetCycles: 0,
+    cyclesDone: 0,
+    phaseIdx: 0,
+    phaseStart: 0,        // this.clock.now() when phase started
+    pauseStart: 0,
+    pauseAccum: 0,
+    tickI: null,
+    rafId: null,
+    _orb: null,
+    _trail: null,
+    _boundRender: null,
+    startedAt: 0,
+    qs: null,
+
+    // Phase metadata. Each phase lights ONE edge of the square. The glowing
+    // sphere travels along that edge over the phase's duration, clockwise:
+    //   inhale → top edge, hold → right edge, exhale → bottom, hold → left.
+    // A full breath cycle = one lap of the square.
+    //
+    // `edge` indexes into the EDGES geometry below. `fill` toggles the soft
+    // inner glow (lit while breathing in / holding in).
+    PHASES: [
+        {name: 'INHALE', bellFreq: 440, edge: 0, fill: true},   // top
+        {name: 'HOLD',   bellFreq: 660, edge: 1, fill: true},   // right
+        {name: 'EXHALE', bellFreq: 330, edge: 2, fill: false},  // bottom
+        {name: 'HOLD',   bellFreq: 247, edge: 3, fill: false}   // left
+    ],
+
+    // Square geometry (matches the SVG rect: 52,52 → 328,328). Each edge is
+    // [startX, startY, endX, endY]; the sphere lerps from start→end over the
+    // phase. Trail dash offsets correspond to edges on the pathLength=1000
+    // perimeter (top 0–250, right 250–500, bottom 500–750, left 750–1000).
+    EDGES: [
+        [52,  52,  328, 52 ],   // 0 top:    left→right
+        [328, 52,  328, 328],   // 1 right:  top→bottom
+        [328, 328, 52,  328],   // 2 bottom: right→left
+        [52,  328, 52,  52 ]    // 3 left:   bottom→top
+    ],
+
+    start(){
+        Snd.init();   // make sure UI sounds work
+        this.proto = PROTOCOLS.find(p => p.id === UI.protoId);
+        const dur = DURATIONS.find(d => d.id === UI.durId);
+        this.targetCycles = dur.cycles;
+        this.cyclesDone = 0;
+        this.phaseIdx = 0;
+        this.pauseAccum = 0;
+        this.startedAt = this.clock.now();
+        this.active = true;
+        this.paused = false;
+
+        document.getElementById('setup').classList.add('hide');
+        document.getElementById('end').classList.remove('on');
+        document.getElementById('session').classList.add('on');
+        document.getElementById('back-link').style.display = 'none';
+
+        // Setup ring + cycle counter
+        document.getElementById('cyc-total').textContent =
+            this.targetCycles === Infinity ? '∞' : this.targetCycles;
+        document.getElementById('cyc-num').textContent = 1;
+        document.getElementById('pause-btn').textContent = 'PAUSE';
+
+        if(this.qs && this.qs.btn) this.qs.btn.classList.add('on');
+
+        // Cache animated elements once (avoids per-frame DOM lookups)
+        this._orb = document.getElementById('neon-orb');
+        this._trail = document.getElementById('neon-trail');
+
+        this.enterPhase(0);
+        // Logic tick (counter + phase advance) can run at a relaxed rate...
+        this.tickI = this.scheduler.setInterval(() => this.tick(), 100);
+        // ...while the sphere/trail render at 60fps for fluid motion.
+        this._boundRender = () => this.renderLoop();
+        this.rafId = this.scheduler.requestAnimationFrame(this._boundRender);
+    },
+
+    enterPhase(idx){
+        // Skip phases with duration 0 (e.g. coherence has 0-second holds)
+        let safeIdx = idx;
+        let attempts = 0;
+        while(this.proto.pattern[safeIdx] === 0 && attempts < 4){
+            safeIdx = (safeIdx + 1) % 4;
+            attempts++;
+            if(safeIdx === 0 && idx !== 0){
+                // We wrapped around — this should never happen with valid protocols
+                // but as a safety, treat it as a completed cycle
+                this.completeCycle();
+                return;
+            }
+        }
+        this.phaseIdx = safeIdx;
+        this.phaseStart = this.clock.now();
+        const phase = this.PHASES[safeIdx];
+        const duration = this.proto.pattern[safeIdx];
+
+        // Phase label
+        document.getElementById('phase-label').textContent =
+            safeIdx === 0 ? 'PHASE 1 · BREATHE IN' :
+            safeIdx === 1 ? 'PHASE 2 · HOLD' :
+            safeIdx === 2 ? 'PHASE 3 · BREATHE OUT' :
+                            'PHASE 4 · HOLD';
+        const ptxt = document.getElementById('phase-text');
+        ptxt.textContent = phase.name;
+        ptxt.classList.toggle('hold', safeIdx === 1 || safeIdx === 3);
+
+        // Neon visual: position the sphere at the start of this phase's edge,
+        // and reset the trail to start growing along this edge. tick() advances
+        // both as the phase progresses.
+        this.placeOrb(phase.edge, 0);
+
+        // Trail: faint glow along the edge being traced. Grows from 0 → 250
+        // (one edge's worth on the pathLength=1000 perimeter), starting at the
+        // edge's offset.
+        const trail = document.getElementById('neon-trail');
+        const edgeOffset = phase.edge * 250;
+        trail.style.strokeDasharray = '0 1000';
+        trail.style.strokeDashoffset = -edgeOffset;
+
+        // Subtle inner fill: lit during inhale/hold-in, fades during exhale/out
+        document.getElementById('neon-fill').classList.toggle('lit', phase.fill);
+
+        // Sound cue
+        if(UI.cue === 'tones'){
+            CueSnd.phaseBell(phase.bellFreq);
+        }
+    },
+
+    // Place the glowing sphere at a fraction `t` (0→1) along the given edge.
+    placeOrb(edgeIdx, t){
+        const [x0, y0, x1, y1] = this.EDGES[edgeIdx];
+        const x = x0 + (x1 - x0) * t;
+        const y = y0 + (y1 - y0) * t;
+        // Use cached element; move the group via transform (circles at 0,0).
+        (this._orb || (this._orb = document.getElementById('neon-orb')))
+            .setAttribute('transform', `translate(${x.toFixed(2)} ${y.toFixed(2)})`);
+    },
+
+    tick(){
+        if(!this.active || this.paused) return;
+        const phaseDur = this.proto.pattern[this.phaseIdx];
+        const elapsed = (this.clock.now() - this.phaseStart) / 1000;
+        const remaining = Math.max(0, phaseDur - elapsed);
+
+        // Update seconds counter (count down to 1, never show 0)
+        document.getElementById('sec-counter').textContent =
+            Math.max(1, Math.ceil(remaining));
+
+        // Advance phase?
+        if(elapsed >= phaseDur){
+            const nextIdx = (this.phaseIdx + 1) % 4;
+            if(nextIdx === 0){
+                // Completed a full cycle
+                this.completeCycle();
+            } else {
+                this.enterPhase(nextIdx);
+            }
+        }
+    },
+
+    // Smooth 60fps render loop — moves the sphere and grows the trail. This is
+    // decoupled from tick() (which runs on an interval for logic/counting) so
+    // the motion is continuous rather than stepping at the tick rate. The
+    // position is derived from the high-res clock, so it stays exact.
+    renderLoop(){
+        if(!this.active){ this.rafId = null; return; }
+        if(!this.paused){
+            const phaseDur = this.proto.pattern[this.phaseIdx];
+            const elapsed = (this.clock.now() - this.phaseStart) / 1000;
+            const progress = Math.min(1, elapsed / phaseDur);
+            const phase = this.PHASES[this.phaseIdx];
+
+            this.placeOrb(phase.edge, progress);
+
+            // Trail grows from 0 to a full edge (250 units) as the orb advances
+            this._trail.style.strokeDasharray = (progress * 250) + ' 1000';
+            this._trail.style.strokeDashoffset = -(phase.edge * 250);
+        }
+        this.rafId = this.scheduler.requestAnimationFrame(this._boundRender);
+    },
+
+    completeCycle(){
+        this.cyclesDone++;
+        if(this.cyclesDone >= this.targetCycles){
+            this.end();
+            return;
+        }
+        document.getElementById('cyc-num').textContent = this.cyclesDone + 1;
+        this.enterPhase(0);
+    },
+
+    togglePause(){
+        if(!this.active) return;
+        if(this.paused){
+            // Resume — adjust phaseStart so elapsed-within-phase is preserved.
+            // The neon light resumes from where tick() left it; no manual
+            // visual restoration is needed since tick() drives strokeDashoffset
+            // directly from elapsed time.
+            const pauseDuration = this.clock.now() - this.pauseStart;
+            this.phaseStart += pauseDuration;
+            this.pauseAccum += pauseDuration;
+            this.paused = false;
+            document.getElementById('pause-btn').textContent = 'PAUSE';
+        } else {
+            this.paused = true;
+            this.pauseStart = this.clock.now();
+            document.getElementById('pause-btn').textContent = 'RESUME';
+            // The neon light simply stops moving because tick() early-returns
+            // while paused. The CSS pulse animation continues, which reads as
+            // a gentle "held" state — appropriate for a paused breath.
+        }
+    },
+
+    cancel(){
+        // User stopped voluntarily — go straight to end screen with current stats
+        this.end(/*early=*/true);
+    },
+
+    end(early){
+        this.active = false;
+        this.scheduler.clear(this.tickI);
+        if(this.rafId){ this.scheduler.clear(this.rafId); this.rafId = null; }
+        if(this.qs && this.qs.btn) this.qs.btn.classList.remove('on');
+
+        document.getElementById('session').classList.remove('on');
+
+        const totalMs = this.clock.now() - this.startedAt - this.pauseAccum;
+        const sec = Math.floor(totalMs / 1000);
+        const mm = Math.floor(sec / 60);
+        const ss = (sec % 60).toString().padStart(2, '0');
+
+        // Defensive: each setter wrapped so a missing DOM node never blocks
+        // the rest of the end flow. (We had a bug where stop() would freeze
+        // the screen because a missing id silently threw mid-function.)
+        try { document.getElementById('end-cycles').textContent = this.cyclesDone; } catch(e){}
+        try { document.getElementById('end-time').textContent = mm + ':' + ss; } catch(e){}
+        try { document.getElementById('end-proto').textContent = this.proto.pattern.join('-'); } catch(e){}
+
+        const titleEl = document.getElementById('end-title');
+        const subEl   = document.getElementById('end-sub');
+        document.querySelector('.end-tag').textContent = early ? 'SESSION STOPPED' : 'SESSION COMPLETE';
+        if(early){
+            if(titleEl) titleEl.textContent = 'STOPPED';
+            if(subEl)   subEl.textContent = this.cyclesDone > 0
+                ? BM.text('Sesión parcial guardada','Partial session saved')
+                : 'Try again when ready';
+        } else {
+            if(titleEl) titleEl.textContent = 'READY';
+            if(subEl)   subEl.textContent = BM.text('Sesión de respiración completada','Breathing session complete');
+        }
+
+        // Persist session log (no "best" score — wellness module)
+        Store.saveSession(MODULE, {
+            protocol: this.proto.id,
+            pattern: this.proto.pattern.join('-'),
+            targetCycles: this.targetCycles === Infinity ? null : this.targetCycles,
+            cyclesDone: this.cyclesDone,
+            durationSec: sec,
+            stopped: !!early
+        });
+
+        document.getElementById('end').classList.add('on');
+        document.getElementById('back-link').style.display = '';
+    },
+
+    again(){ this.start(); },
+
+    toSetup(){
+        document.getElementById('end').classList.remove('on');
+        document.getElementById('setup').classList.remove('hide');
+        document.getElementById('back-link').style.display = '';
+        if(this.qs && this.qs.btn) this.qs.btn.classList.remove('on');
+    },
+
+    // ── Quick switcher hooks ──
+    // Since this is a wellness module, "pause" semantics here are friendly:
+    // when the switcher opens, we soft-pause the session (no penalty for
+    // anything since there's no scoring). On resume, continue from where
+    // we were.
+    pauseFromSwitcher(){
+        if(this.active && !this.paused) this.togglePause();
+    },
+    resumeFromSwitcher(){
+        if(this.active && this.paused) this.togglePause();
+    },
+    exitForNav(){
+        this.active = false;
+        this.scheduler.clear(this.tickI);
+        if(this.rafId){ this.scheduler.clear(this.rafId); this.rafId = null; }
+    }
+};
+
+// ═══ INIT ═══
+UI.buildSetup();
+
+// Quick switcher
+BM.attachTraining({module:MODULE,game:Session,ui:UI,start:'start',finish:'end'});
+Session.qs = BM.mountQuickSwitcher({
+    current: MODULE,
+    onPause:  () => Session.pauseFromSwitcher(),
+    onResume: () => Session.resumeFromSwitcher(),
+    onExit:   () => Session.exitForNav()
+});
+</script>
+</body>
+</html>

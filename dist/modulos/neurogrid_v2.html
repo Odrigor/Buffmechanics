@@ -1,0 +1,718 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BuffMechanics | NeuroGrid</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' fill='%233b82f6'/%3E%3Ctext x='50%25' y='54%25' text-anchor='middle' dominant-baseline='middle' font-family='monospace' font-size='40' font-weight='700' fill='%23ffffff'%3EB%3C/text%3E%3Crect x='2' y='2' width='60' height='60' fill='none' stroke='%23ffffff' stroke-width='3'/%3E%3C/svg%3E">
+    <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="../assets/shared.css">
+    <style>
+        :root{
+            --accent:#3b82f6;
+            --accent-dim:rgba(59,130,246,.12);
+        }
+        body{height:100vh;overflow:hidden;cursor:crosshair}
+
+        #arena{position:fixed;inset:0;z-index:0;
+            background-image:linear-gradient(rgba(255,255,255,.015) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.015) 1px,transparent 1px);
+            background-size:60px 60px}
+
+        /* Targets (shapes) — z-index keeps them above the grid but below
+           the rule banner (z 110). Spawn logic also avoids the banner zone. */
+        .tgt{position:absolute;z-index:20;transform:translate(-50%,-50%) scale(0);cursor:crosshair;animation:tIn .2s cubic-bezier(.34,1.56,.64,1) forwards;display:grid;place-items:center;transition:filter .1s}
+        @keyframes tIn{to{transform:translate(-50%,-50%) scale(1)}}
+        .tgt:hover{filter:brightness(1.2);z-index:25}
+        .sh-circle{border-radius:50%}
+        .sh-square{border-radius:6px}
+        .sh-triangle{clip-path:polygon(50% 0%,0% 100%,100% 100%);border-radius:0!important}
+        .sh-diamond{clip-path:polygon(50% 0%,100% 50%,50% 100%,0% 50%);border-radius:0!important}
+
+        .ptcl{position:absolute;pointer-events:none;border-radius:50%;will-change:transform,opacity;z-index:15}
+
+        /* Rule banner */
+        .rule-wrap{position:fixed;top:56px;left:50%;transform:translateX(-50%);z-index:110;pointer-events:none;opacity:0;transition:opacity .3s;display:flex;flex-direction:column;align-items:center;gap:4px}
+        .rule-wrap.on{opacity:1}
+        .rule-box{background:var(--sf);border:1px solid var(--bd);padding:8px 28px;text-align:center;transition:border-color .3s;position:relative;overflow:hidden}
+        .rule-text{font-size:24px;font-weight:700;letter-spacing:.05em;line-height:1.2;transition:all .15s}
+        .rule-timer{position:absolute;bottom:0;left:0;height:2px;background:var(--accent);width:100%;transform-origin:left;transition:transform linear}
+        .rule-label{font-family:'Space Mono',monospace;font-size:7px;color:var(--t3);letter-spacing:.15em;text-transform:uppercase}
+        .rule-flash{animation:rflash .4s ease}
+        @keyframes rflash{0%{box-shadow:0 0 20px var(--accent)}100%{box-shadow:none}}
+
+        /* Setup rule card */
+        .rule-card{background:var(--sf);border:1px solid var(--bd);padding:12px 16px;max-width:480px;text-align:left}
+        .rule-title{font-family:'Space Mono',monospace;font-size:9px;color:var(--accent);letter-spacing:.14em;text-transform:uppercase;margin-bottom:4px}
+        .rule-desc{font-size:12px;color:var(--t1);line-height:1.5}
+        .rule-desc b{color:var(--accent)}
+
+        .rcard .rgrid:first-of-type{grid-template-columns:1fr 1fr 1fr}
+
+        /* Rule banner sits above targets so it's never occluded */
+        .rule-wrap{z-index:200!important}
+
+        /* ═══ Quick Start + Tune ═══ */
+        .qs-card{display:flex;flex-direction:column;align-items:center;max-width:440px;width:100%;margin:0 auto}
+        .qs-mode{width:100%;text-align:center;background:var(--sf);border:1px solid var(--bd);padding:18px 20px;margin-bottom:12px;transition:border-color .2s}
+        .qs-mode-label{font-family:'Space Mono',monospace;font-size:9px;letter-spacing:.18em;color:var(--t3);text-transform:uppercase;margin-bottom:6px}
+        .qs-mode-value{font-size:24px;font-weight:700;letter-spacing:.02em;color:var(--t1);line-height:1}
+        .qs-mode-sub{font-family:'Space Mono',monospace;font-size:10px;color:var(--t2);margin-top:6px;letter-spacing:.04em}
+        .tune-toggle{width:100%;display:flex;align-items:center;justify-content:center;gap:8px;background:none;border:1px solid var(--bd);color:var(--t2);font-family:'Space Mono',monospace;font-size:10px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;padding:10px;cursor:pointer;margin-bottom:12px;transition:all .2s}
+        .tune-toggle:hover{border-color:var(--t2);color:var(--t1)}
+        .tune-toggle .chev{transition:transform .3s;display:inline-block}
+        .tune-toggle.open .chev{transform:rotate(90deg)}
+        .tune-panel{width:100%;overflow:hidden;max-height:0;opacity:0;transition:max-height .35s cubic-bezier(.4,0,.2,1),opacity .25s,margin .35s;margin-bottom:0}
+        .tune-panel.open{max-height:1000px;opacity:1;margin-bottom:12px}
+        .tune-inner{background:var(--sf);border:1px solid var(--bd);padding:18px 18px 14px}
+        .tune-adv-divider{display:flex;align-items:center;gap:10px;margin:16px 0 12px;font-family:'Space Mono',monospace;font-size:8px;letter-spacing:.16em;color:var(--t3);text-transform:uppercase}
+        .tune-adv-divider::before,.tune-adv-divider::after{content:'';flex:1;height:1px;background:var(--bd)}
+
+        /* ═══ Redesigned results ═══ */
+        .res-metric{text-align:center;margin-bottom:6px}
+        .res-metric-value{font-size:56px;font-weight:700;color:var(--accent);line-height:1;letter-spacing:-1px}
+        .res-metric-unit{font-size:20px;color:var(--t2);font-weight:700;margin-left:4px}
+        .res-metric-label{font-family:'Space Mono',monospace;font-size:9px;letter-spacing:.16em;color:var(--t3);text-transform:uppercase;margin-top:6px}
+        .res-subduo{display:flex;justify-content:center;gap:28px;margin:10px 0 4px}
+        .res-subduo-item{text-align:center}
+        .res-subduo-v{font-size:22px;font-weight:700;line-height:1}
+        .res-subduo-l{font-family:'Space Mono',monospace;font-size:8px;letter-spacing:.14em;color:var(--t3);text-transform:uppercase;margin-top:4px}
+        .res-compare{text-align:center;font-family:'Space Mono',monospace;font-size:12px;letter-spacing:.04em;margin:14px 0;min-height:20px}
+        .res-compare.better{color:var(--hit)}
+        .res-compare.worse{color:var(--t2)}
+        .res-compare.record{color:var(--gold,#eab308)}
+        .res-compare .ar{font-weight:700;margin-right:4px}
+        .res-evo{margin:16px 0;padding:0 4px}
+        .res-evo-title{font-family:'Space Mono',monospace;font-size:8px;letter-spacing:.16em;color:var(--t3);text-transform:uppercase;margin-bottom:8px;display:flex;justify-content:space-between}
+        .res-evo-bars{display:flex;align-items:flex-end;gap:3px;height:50px}
+        .res-evo-bar{flex:1;background:var(--accent);opacity:.35;min-height:3px;border-radius:1px;transition:height .4s cubic-bezier(.4,0,.2,1),opacity .2s}
+        .res-evo-bar.latest{opacity:.95}
+        .res-evo-bar:hover{opacity:1}
+        .res-evo-empty{font-family:'Space Mono',monospace;font-size:9px;color:var(--t3);text-align:center;padding:14px 0;letter-spacing:.1em}
+        .res-details{display:flex;justify-content:center;gap:18px;flex-wrap:wrap;font-family:'Space Mono',monospace;font-size:10px;color:var(--t2);margin:14px 0;letter-spacing:.04em}
+        .res-details b{color:var(--t1);font-weight:700}
+    </style>
+<link rel="stylesheet" href="../assets/experience.css">
+<link rel="stylesheet" href="../assets/workspace.css">
+</head>
+<body>
+<div id="arena"></div>
+
+<div class="hud" id="hud">
+    <div class="hb"><span class="hl" data-i18n="ng.score">Score</span><span class="hv" style="color:var(--accent)" id="h-sc">0</span></div>
+    <div class="hb c">
+        <div class="tpill"><div class="tdot" id="h-tdot"></div><span class="hv" id="h-tm" style="font-size:20px">60</span></div>
+        <div class="lives" id="h-lives" style="margin-top:4px"></div>
+    </div>
+    <div class="hb r"><span class="hl" data-i18n="ng.accuracy">Accuracy</span><span class="hv" id="h-ac">100%</span></div>
+</div>
+
+<div class="rule-wrap" id="rule-wrap">
+    <div class="rule-label" data-i18n="ng.activerule">ACTIVE RULE</div>
+    <div class="rule-box" id="rule-box">
+        <div class="rule-text" id="rule-text">—</div>
+        <div class="rule-timer" id="rule-timer"></div>
+    </div>
+</div>
+
+<div class="streak-wrap" id="stwrap">
+    <div class="spips" id="stbar"></div>
+    <span class="slbl" id="stval">×0</span>
+</div>
+
+<div class="setup" id="setup">
+    <button class="snd-toggle" id="snd-btn" onclick="Snd.toggle()">♪ ON</button>
+    <div class="setup-logo">NGR</div>
+    <div class="stitle">NEURO<em>GRID</em></div>
+    <div class="ssub" data-i18n="ng.sub">Visual scanning — rule-based shooting</div>
+    <div class="rule-card">
+        <div class="rule-title" data-i18n="ng.howtitle">HOW IT WORKS</div>
+        <div class="rule-desc" data-i18n-html="ng.howdesc">Targets spawn with random <b>color</b> and <b>shape</b>. A <b>rule</b> at the top tells you what to shoot. Click only valid targets. The rule changes every few seconds. Wrong clicks and missed valid targets both count against you.</div>
+    </div>
+    <div class="qs-card">
+        <div class="qs-mode" id="qs-mode">
+            <div class="qs-mode-label" data-i18n="m.mode">Mode</div>
+            <div class="qs-mode-value" id="qs-mode-value">60 seconds</div>
+            <div class="qs-mode-sub" id="qs-mode-sub">Medium · scan, match the rule, adapt</div>
+        </div>
+
+        <button class="tune-toggle" id="tune-toggle" onclick="UI.toggleTune()">
+            <span class="chev">▸</span> <span data-i18n="m.tune">Tune</span>
+        </button>
+
+        <div class="tune-panel" id="tune-panel">
+            <div class="tune-inner">
+                <!-- Difficulty preset -->
+                <div class="pgroup"><div class="plabel" data-i18n="m.difficulty">Difficulty</div>
+                    <div class="pbtn-row" id="t-diff">
+                        <button class="pb" onclick="UI.setDiff('easy',this)" data-i18n="m.easy">Easy</button>
+                        <button class="pb on" onclick="UI.setDiff('medium',this)" data-i18n="m.medium">Medium</button>
+                        <button class="pb" onclick="UI.setDiff('hard',this)" data-i18n="m.hard">Hard</button>
+                    </div>
+                </div>
+
+                <!-- Duration -->
+                <div class="pgroup"><div class="plabel" data-i18n="m.duration">Duration</div>
+                    <div class="pbtn-row" id="t-time">
+                        <button class="pb" onclick="UI.setTime(45,this)">45s</button>
+                        <button class="pb on" onclick="UI.setTime(60,this)">60s</button>
+                        <button class="pb" onclick="UI.setTime(90,this)">90s</button>
+                        <button class="pb" onclick="UI.setTime(120,this)">120s</button>
+                        <button class="pb" onclick="UI.setTime(0,this)">∞</button>
+                    </div>
+                </div>
+
+                <!-- ── Advanced ── -->
+                <div class="tune-adv-divider" data-i18n="m.advanced">Advanced</div>
+
+                <div class="pgroup"><div class="plabel" data-i18n="m.challenge">Challenge</div>
+                    <div class="pbtn-row" id="t-challenge">
+                        <button class="pb on" onclick="UI.setChallenge('normal',this)" data-i18n="m.normal">Normal</button>
+                        <button class="pb" onclick="UI.setChallenge('survival',this)" data-i18n="m.survival">Survival — 3 lives</button>
+                    </div>
+                    <div class="mono" style="font-size:9px;color:var(--t3);margin-top:6px;line-height:1.5" id="challenge-hint" data-i18n="ng.hint.normal">
+                        Normal: scan for the set duration.
+                    </div>
+                </div>
+
+                <div class="pgroup"><div class="plabel" data-i18n="ng.rulecomplexity">Rule complexity</div>
+                    <div class="pbtn-row" id="t-complexity">
+                        <button class="pb" onclick="UI.setComplexity('simple',this)" data-i18n="m.simple">Simple</button>
+                        <button class="pb on" onclick="UI.setComplexity('mixed',this)" data-i18n="m.mixed">Mixed</button>
+                        <button class="pb" onclick="UI.setComplexity('advanced',this)" data-i18n="ng.advanced">Advanced</button>
+                    </div>
+                    <div class="mono" style="font-size:9px;color:var(--t3);margin-top:6px;line-height:1.5">
+                        <span data-i18n="ng.rulecomphint">Simple = single attribute ("shoot RED"). Advanced = combined / negated rules ("NOT blue triangles").</span>
+                    </div>
+                </div>
+
+                <div class="pgroup"><div class="plabel" data-i18n="ng.spawnrate">Spawn rate</div>
+                    <div class="pbtn-row" id="t-spawn">
+                        <button class="pb" onclick="UI.setSpawn(1000,this)" data-i18n="m.slow">Slow</button>
+                        <button class="pb on" onclick="UI.setSpawn(700,this)" data-i18n="m.normal">Normal</button>
+                        <button class="pb" onclick="UI.setSpawn(500,this)" data-i18n="m.fast">Fast</button>
+                    </div>
+                </div>
+
+                <div class="pgroup"><div class="plabel" data-i18n="ng.targetlife">Target lifetime</div>
+                    <div class="pbtn-row" id="t-life">
+                        <button class="pb" onclick="UI.setLife(3500,this)" data-i18n="m.long">Long</button>
+                        <button class="pb on" onclick="UI.setLife(2500,this)" data-i18n="m.normal">Normal</button>
+                        <button class="pb" onclick="UI.setLife(1800,this)" data-i18n="m.short">Short</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <button class="gobtn" style="width:100%" onclick="Game.launch()" data-i18n="m.start">▶ START</button>
+        <button class="gobtn-back" onmouseenter="Snd.tick(660)" onclick="BM.backToHome()" data-i18n="m.back">← BACK TO MENU</button>
+    </div>
+
+    <div class="hint" data-i18n="ng.hint">Read the rule. Shoot only matching targets. Adapt when it changes.</div>
+</div>
+
+<div class="res hide" id="res">
+    <div class="rcard">
+        <div class="hl" id="r-mode" style="text-align:center;margin-bottom:10px">SESSION COMPLETE</div>
+
+        <!-- Primary metric: valid targets processed per minute -->
+        <div class="res-metric">
+            <span class="res-metric-value" id="r-primary">0</span><span class="res-metric-unit">hits/min</span>
+            <div class="res-metric-label" data-i18n="ng.metric">Valid targets processed per minute</div>
+        </div>
+
+        <!-- Components -->
+        <div class="res-subduo">
+            <div class="res-subduo-item">
+                <div class="res-subduo-v" style="color:var(--hit)" id="r-acc">0%</div>
+                <div class="res-subduo-l" data-i18n="ng.accuracy">Accuracy</div>
+            </div>
+            <div class="res-subduo-item">
+                <div class="res-subduo-v" style="color:var(--warn)" id="r-rt">0ms</div>
+                <div class="res-subduo-l" data-i18n="ng.avgreact">Avg reaction</div>
+            </div>
+        </div>
+
+        <!-- Comparison -->
+        <div class="res-compare" id="r-compare"></div>
+
+        <!-- Evolution -->
+        <div class="res-evo">
+            <div class="res-evo-title"><span data-i18n="m.recent">Recent sessions</span><span id="r-evo-best"></span></div>
+            <div class="res-evo-bars" id="r-evo-bars"></div>
+        </div>
+
+        <!-- Details -->
+        <div class="res-details" id="r-details"></div>
+
+        <div class="rbtns">
+            <button class="rb-s" onclick="location.href='../index.html'" data-i18n="m.exit">EXIT</button>
+            <button class="rb-s" onclick="Game.toSetup()" data-i18n="m.menu">MENU</button>
+            <button class="rb-p" onclick="Game.retry()" data-i18n="m.retry">RETRY</button>
+        </div>
+    </div>
+</div>
+
+<script src="../assets/i18n.js"></script>
+<script src="../assets/shared.js"></script>
+<script src="../assets/history.js"></script>
+<script src="../assets/training-core.js"></script>
+<script src="../assets/routine.js"></script>
+<script src="../assets/experience.js"></script>
+<script>
+const MODULE='neurogrid';
+
+const COLORS=[{id:'red',hex:'#ef4444',i18n:'ng.color.red'},{id:'blue',hex:'#3b82f6',i18n:'ng.color.blue'},{id:'green',hex:'#22c55e',i18n:'ng.color.green'},{id:'yellow',hex:'#eab308',i18n:'ng.color.yellow'}];
+const SHAPES=[{id:'circle',i18n:'ng.shape.circle',css:'sh-circle'},{id:'square',i18n:'ng.shape.square',css:'sh-square'},{id:'triangle',i18n:'ng.shape.triangle',css:'sh-triangle'},{id:'diamond',i18n:'ng.shape.diamond',css:'sh-diamond'}];
+// Resolve color/shape display words in the current language.
+function cName(c){ return I18N.t(c.i18n); }
+function sName(s){ return I18N.t(s.i18n); }
+const COL_MAP={};COLORS.forEach(c=>COL_MAP[c.id]=c);
+
+const PRESETS={
+    easy:{spawnMs:1000,lifeMs:3500,ruleMinMs:5000,ruleMaxMs:7000,complexity:'simple'},
+    medium:{spawnMs:700,lifeMs:2500,ruleMinMs:4000,ruleMaxMs:6000,complexity:'mixed'},
+    hard:{spawnMs:500,lifeMs:1800,ruleMinMs:3000,ruleMaxMs:5000,complexity:'advanced'}
+};
+
+const UI={
+    diff:'medium', time:60,
+    complexity:'mixed', spawn:700, life:2500,
+    challenge:'normal',
+    tuneOpen:false,
+
+    toggleTune(){
+        this.tuneOpen=!this.tuneOpen;
+        document.getElementById('tune-toggle').classList.toggle('open',this.tuneOpen);
+        document.getElementById('tune-panel').classList.toggle('open',this.tuneOpen);
+        Snd.tick(880);
+    },
+
+    // Difficulty preset sets complexity + spawn + life together, syncs button rows
+    setDiff(k,btn){
+        this.diff=k;BM.selectPb(btn);
+        const p=PRESETS[k];
+        this.complexity=p.complexity;this.spawn=p.spawnMs;this.life=p.lifeMs;
+        this._selectInRow('t-complexity', `'${p.complexity}'`);
+        this._selectInRow('t-spawn', p.spawnMs);
+        this._selectInRow('t-life', p.lifeMs);
+        this.refreshSummary();
+    },
+    setTime(v,btn){this.time=v;BM.selectPb(btn);this.refreshSummary()},
+
+    setChallenge(c,btn){
+        this.challenge=c;BM.selectPb(btn);
+        document.getElementById('challenge-hint').textContent = c==='survival'
+            ? I18N.t('ng.hint.surv')
+            : I18N.t('ng.hint.normal');
+        this.refreshSummary();
+    },
+
+    setComplexity(v,btn){this.complexity=v;BM.selectPb(btn);this.syncDiffHighlight();this.refreshSummary()},
+    setSpawn(v,btn){this.spawn=v;BM.selectPb(btn);this.syncDiffHighlight();this.refreshSummary()},
+    setLife(v,btn){this.life=v;BM.selectPb(btn);this.syncDiffHighlight();this.refreshSummary()},
+
+    // Helper: highlight the button in a row whose onclick contains `match`
+    _selectInRow(rowId, match){
+        document.querySelectorAll('#'+rowId+' .pb').forEach(b=>{
+            b.classList.toggle('on', b.getAttribute('onclick').includes(String(match)));
+        });
+    },
+
+    syncDiffHighlight(){
+        let matched='';
+        for(const [k,p] of Object.entries(PRESETS)){
+            if(p.complexity===this.complexity && p.spawnMs===this.spawn && p.lifeMs===this.life){ matched=k; break; }
+        }
+        this.diff=matched;
+        document.querySelectorAll('#t-diff .pb').forEach(b=>{
+            const k=b.getAttribute('onclick').match(/'(\w+)'/)[1];
+            b.classList.toggle('on',k===matched);
+        });
+    },
+
+    refreshSummary(){
+        const diffLabel = this.diff ? I18N.t('m.'+this.diff) : I18N.t('m.custom').replace('…','');
+        if(this.challenge==='survival'){
+            document.getElementById('qs-mode-value').textContent=I18N.t('m.survival').split(' —')[0];
+            document.getElementById('qs-mode-sub').textContent=`${diffLabel} ${I18N.t('ng.start')} · ${I18N.t('ng.lives3')} · ${I18N.t('ng.sub.surv')}`;
+        } else {
+            document.getElementById('qs-mode-value').textContent =
+                this.time===0 ? I18N.t('m.endless') : this.time+(I18N.lang==='es'?' segundos':' seconds');
+            document.getElementById('qs-mode-sub').textContent=`${diffLabel} · ${I18N.t('ng.sub.normal')}`;
+        }
+    }
+};
+
+function burst(x,y,color,n=8){
+    for(let i=0;i<n;i++){const p=document.createElement('div');p.className='ptcl';
+        const sz=3+Math.random()*4;p.style.width=sz+'px';p.style.height=sz+'px';p.style.background=color;
+        p.style.left=x+'px';p.style.top=y+'px';document.getElementById('arena').appendChild(p);
+        const a=Math.random()*Math.PI*2,v=1+Math.random()*2;
+        const anim=p.animate([{transform:'translate(0,0) scale(1)',opacity:1},{transform:`translate(${Math.cos(a)*v*20}px,${Math.sin(a)*v*20}px) scale(0)`,opacity:0}],
+            {duration:300+Math.random()*100,easing:'cubic-bezier(0,.9,.57,1)'});
+        anim.onfinish=()=>p.remove();
+    }
+}
+
+function genRule(complexity){
+    const types=['match-color','match-shape','avoid-color','avoid-shape'];
+    if(complexity==='mixed'||complexity==='advanced')types.push('color-and-shape');
+    if(complexity==='advanced')types.push('color-or-color');
+    const type=types[Math.floor(Math.random()*types.length)];
+    const rc=()=>COLORS[Math.floor(Math.random()*COLORS.length)];
+    const rs=()=>SHAPES[Math.floor(Math.random()*SHAPES.length)];
+    if(type==='match-color'){const c=rc();return{render:()=>`${I18N.t('ng.rule.shoot')} <span style="color:${c.hex}">${cName(c)}</span>`,test:(col,shp)=>col===c.id,borderColor:c.hex}}
+    if(type==='match-shape'){const s=rs();return{render:()=>`${I18N.t('ng.rule.shoot')} ${sName(s)}`,test:(col,shp)=>shp===s.id,borderColor:'#fff'}}
+    if(type==='avoid-color'){const c=rc();return{render:()=>`${I18N.t('ng.rule.avoid')} <span style="color:${c.hex}">${cName(c)}</span>`,test:(col,shp)=>col!==c.id,borderColor:c.hex}}
+    if(type==='avoid-shape'){const s=rs();return{render:()=>`${I18N.t('ng.rule.avoid')} ${sName(s)}`,test:(col,shp)=>shp!==s.id,borderColor:'var(--miss)'}}
+    if(type==='color-and-shape'){const c=rc(),s=rs();return{render:()=>`<span style="color:${c.hex}">${cName(c)}</span> ${sName(s)}`,test:(col,shp)=>col===c.id&&shp===s.id,borderColor:c.hex}}
+    if(type==='color-or-color'){let c1=rc(),c2=rc();while(c2.id===c1.id)c2=rc();return{render:()=>`<span style="color:${c1.hex}">${cName(c1)}</span> ${I18N.t('ng.rule.or')} <span style="color:${c2.hex}">${cName(c2)}</span>`,test:(col,shp)=>col===c1.id||col===c2.id,borderColor:'var(--accent)'}}
+}
+
+const Game={
+    active:false, paused:false, mode:'',lastMode:'',
+    cfg:{spawnMs:800,lifeMs:2500,ruleMinMs:4000,ruleMaxMs:6000,complexity:'simple'},
+    // Snapshots used by progressive ramp (survival + custom-progressive).
+    baseSpawn:800, baseLife:2500, baseComplexity:'simple',
+    rule:null,score:0,hits:0,wrongShots:0,missedValid:0,streak:0,maxStreak:0,consecutiveWrong:0,
+    reactionTimes:[],lives:0,maxLives:0,timeLeft:0,elapsed:0,
+    spawnI:null,timerI:null,ruleI:null,elapsedI:null,
+    timed:true, progressive:false,
+    qs:null,
+
+    launch(){
+        Snd.init();
+        this.mode = UI.challenge === 'survival' ? 'survival' : 'normal';
+        this.lastMode=this.mode;
+        this.diff=UI.diff;
+        this.score=0;this.hits=0;this.wrongShots=0;this.missedValid=0;
+        this.streak=0;this.maxStreak=0;this.consecutiveWrong=0;
+        this.reactionTimes=[];this.elapsed=0;
+        this.paused=false;
+
+        if(this.mode==='survival'){
+            this.cfg={spawnMs:900,lifeMs:3000,ruleMinMs:5000,ruleMaxMs:7000,complexity:'simple'};
+            this.timeLeft=0;this.timed=false;
+            this.lives=3;this.maxLives=3;
+            this.progressive=true;
+        } else {
+            this.cfg={
+                spawnMs:UI.spawn, lifeMs:UI.life, complexity:UI.complexity,
+                ruleMinMs:4000, ruleMaxMs:6000
+            };
+            this.timed=UI.time!==0;
+            this.timeLeft=this.timed?UI.time:0;
+            this.lives=0;this.maxLives=0;
+            this.progressive=false;
+        }
+        // Snapshot base values for progressive ramp
+        this.baseSpawn=this.cfg.spawnMs;
+        this.baseLife=this.cfg.lifeMs;
+        this.baseComplexity=this.cfg.complexity;
+        this.active=true;
+
+        document.getElementById('setup').classList.add('hide');document.getElementById('res').classList.add('hide');
+        document.getElementById('hud').classList.add('on');document.getElementById('rule-wrap').classList.add('on');document.getElementById('stwrap').classList.add('on');
+        document.getElementById('arena').innerHTML='';
+        document.getElementById('h-tm').textContent=this.timed?this.timeLeft:'∞';
+        document.getElementById('h-tdot').style.background=this.mode==='survival'?'var(--miss)':'var(--accent)';
+        BM.drawLives('#h-lives',this.lives,this.maxLives,'sm');BM.buildPips('#stbar',30);this.updateHUD();
+        if(this.qs && this.qs.btn) this.qs.btn.classList.add('on');
+        this.setRule();this.scheduleRule();
+        this.spawnI=this.scheduler.setInterval(()=>this.spawnTarget(),this.cfg.spawnMs);
+        if(this.timed)this.timerI=this.scheduler.setInterval(()=>{this.timeLeft=Math.max(0,Math.ceil(this.sessionDuration-this.clock.now()/1000-(this.timePenalty||0)));this.updateHUD();if(this.timeLeft<=0)this.end()},1000);
+        this.startElapsedInterval();
+    },
+
+    retry(){this.launch()},
+
+    // Per-second tick — survival ramps complexity at 30s/60s; both survival
+    // and custom-progressive ramp spawn rate and target lifetime.
+    // Custom-progressive intentionally keeps the user's chosen complexity.
+    startElapsedInterval(){
+        this.scheduler.clear(this.elapsedI);
+        this.elapsedI=this.scheduler.setInterval(()=>{
+            if(!this.active || this.paused)return;
+            this.elapsed=Math.floor(this.clock.now()/1000);
+            if(this.progressive){
+                // Same ramp formula as before, parametrized by base values
+                this.cfg.spawnMs=Math.max(350,this.baseSpawn-this.elapsed*5);
+                this.cfg.lifeMs =Math.max(1200,this.baseLife -this.elapsed*15);
+                // Only survival escalates the complexity itself
+                if(this.mode==='survival'){
+                    if(this.elapsed>30)this.cfg.complexity='mixed';
+                    if(this.elapsed>60)this.cfg.complexity='advanced';
+                }
+                // Reschedule spawn with new rate
+                this.scheduler.clear(this.spawnI);
+                this.spawnI=this.scheduler.setInterval(()=>this.spawnTarget(),this.cfg.spawnMs);
+            }
+        },1000);
+    },
+
+    toSetup(){
+        document.getElementById('res').classList.add('hide');
+        document.getElementById('setup').classList.remove('hide');
+        if(this.qs && this.qs.btn) this.qs.btn.classList.remove('on');
+    },
+
+    // ── Pause / Resume ──
+    // Wipe the arena (in-flight targets have their own self-destruct timeouts
+    // which would fire under the overlay otherwise) and stop all schedulers.
+    // On resume, fresh rule + fresh spawn cycle.
+    pause(){
+        if(!this.active || this.paused)return;
+        this.paused=true;
+        this.scheduler.clear(this.spawnI);
+        this.scheduler.clear(this.timerI);
+        this.scheduler.clear(this.elapsedI);
+        this.scheduler.clear(this.ruleI);
+        document.getElementById('arena').innerHTML='';
+    },
+    resume(){
+        if(!this.active || !this.paused)return;
+        this.paused=false;
+        this.setRule();this.scheduleRule();
+        this.spawnI=this.scheduler.setInterval(()=>this.spawnTarget(),this.cfg.spawnMs);
+        if(this.timed && this.timeLeft>0)this.timerI=this.scheduler.setInterval(()=>{this.timeLeft=Math.max(0,Math.ceil(this.sessionDuration-this.clock.now()/1000-(this.timePenalty||0)));this.updateHUD();if(this.timeLeft<=0)this.end()},1000);
+        this.startElapsedInterval();
+    },
+    exit(){
+        this.active=false;this.paused=false;
+        this.scheduler.clear(this.spawnI);this.scheduler.clear(this.timerI);this.scheduler.clear(this.elapsedI);this.scheduler.clear(this.ruleI);
+    },
+
+    setRule(){
+        if(this.paused)return;
+        document.querySelectorAll("#arena .tgt").forEach(el=>{this.scheduler.clear(el._expiry);el._resolved=true;el.remove();});
+        this.rule=genRule(this.cfg.complexity);
+        const box=document.getElementById('rule-box');
+        document.getElementById('rule-text').innerHTML=this.rule.render();
+        box.style.borderColor=this.rule.borderColor;
+        box.classList.remove('rule-flash');void box.offsetWidth;box.classList.add('rule-flash');
+        Snd.warn();
+        const timer=document.getElementById('rule-timer');
+        timer.style.transitionDuration='0s';timer.style.transform='scaleX(1)';void timer.offsetWidth;
+        const dur=this.cfg.ruleMinMs+Math.random()*(this.cfg.ruleMaxMs-this.cfg.ruleMinMs);
+        this.ruleDuration=dur;this.ruleStarted=this.clock.now();
+        this.scheduler.clear(this.ruleBar);
+        this.ruleBar=this.scheduler.setInterval(()=>{timer.style.transitionDuration='0s';timer.style.transform='scaleX('+Math.max(0,1-(this.clock.now()-this.ruleStarted)/this.ruleDuration)+')';},50);
+    },
+
+    scheduleRule(){
+        this.scheduler.clear(this.ruleI);
+        const dur=this.ruleDuration;
+        this.ruleI=this.scheduler.setTimeout(()=>{
+            if(!this.active || this.paused)return;
+            this.setRule();this.scheduleRule();
+        },dur);
+    },
+
+    spawnTarget(){
+        if(!this.active || this.paused)return;
+        const col=COLORS[Math.floor(Math.random()*COLORS.length)];
+        const shp=SHAPES[Math.floor(Math.random()*SHAPES.length)];
+        const isValid=this.rule.test(col.id,shp.id);
+        const el=document.createElement('div');el.className='tgt '+shp.css;
+        const size=shp.id==='triangle'?65:55;
+        el.style.width=size+'px';el.style.height=size+'px';el.style.backgroundColor=col.hex;
+        el.dataset.color=col.id;el.dataset.shape=shp.id;el.dataset.valid=isValid?'1':'0';el.dataset.born=''+this.clock.now();
+        // Position the target, avoiding the rule banner's zone so it's never
+        // hidden behind it. We measure the banner's actual box and re-roll if
+        // the candidate position would overlap it (plus a small margin).
+        const pad=80;
+        const half=size/2;
+        let x, y, tries=0;
+        const banner=document.getElementById('rule-wrap');
+        let bx=null;
+        if(banner){
+            const r=banner.getBoundingClientRect();
+            bx={l:r.left-half-10, r:r.right+half+10, t:r.top-half-10, b:r.bottom+half+10};
+        }
+        do{
+            x=pad+Math.random()*(innerWidth-pad*2);
+            y=120+Math.random()*(innerHeight-200);
+            tries++;
+        }while(bx && x>bx.l && x<bx.r && y>bx.t && y<bx.b && tries<12);
+        el.style.left=x+'px';el.style.top=y+'px';
+        el.onmousedown=(e)=>{e.stopPropagation();this.shootTarget(el,e.clientX,e.clientY)};
+        document.getElementById('arena').appendChild(el);
+        const life=this.cfg.lifeMs;
+        el._expiry=this.scheduler.setTimeout(()=>{if(el._resolved||!el.parentNode||!this.active||this.paused)return;
+            el._resolved=true;
+            const wasValid=el.dataset.valid==='1';
+            el.style.transition='transform .15s,opacity .15s';el.style.transform='translate(-50%,-50%) scale(0)';el.style.opacity='0';
+            this.scheduler.setTimeout(()=>{if(el.parentNode)el.remove()},150);
+            if(wasValid){this.missedValid++;this.streak=0;this.consecutiveWrong=0;BM.updatePips('#stbar',0,'#stval');
+                if(this.mode==='survival')this.loseLife();this.updateHUD()}
+        },life);
+    },
+
+    shootTarget(el,mx,my){
+        if(!this.active || this.paused || !el.parentNode || el._resolved)return;
+        el._resolved=true;this.scheduler.clear(el._expiry);
+        const isValid=this.rule.test(el.dataset.color,el.dataset.shape);const rt=this.clock.now()-parseFloat(el.dataset.born);
+        el.style.pointerEvents='none';el.style.transition='transform .08s,opacity .08s';
+        el.style.transform='translate(-50%,-50%) scale(1.3)';el.style.opacity='0';
+        this.scheduler.setTimeout(()=>{if(el.parentNode)el.remove()},80);
+        if(isValid){
+            this.hits++;this.streak++;this.consecutiveWrong=0;
+            if(this.streak>this.maxStreak)this.maxStreak=this.streak;
+            this.reactionTimes.push(rt);
+            const speedBonus=Math.max(0,Math.round((this.cfg.lifeMs-rt)/10));
+            this.score+=100+speedBonus+this.streak*3;
+            Snd.hit();burst(mx,my,COL_MAP[el.dataset.color].hex,10);
+            if(this.mode==='survival'&&this.hits%40===0&&this.lives<this.maxLives){this.lives++;BM.drawLives('#h-lives',this.lives,this.maxLives,'sm')}
+        }else{
+            this.wrongShots++;this.streak=0;this.consecutiveWrong++;
+            this.score=Math.max(0,this.score-150);Snd.miss();
+            document.getElementById('arena').style.boxShadow='inset 0 0 60px rgba(255,34,85,.25)';
+            this.scheduler.setTimeout(()=>document.getElementById('arena').style.boxShadow='none',200);
+            if(this.mode==='survival'){this.loseLife();
+                if(this.consecutiveWrong>=3&&this.lives>0){this.loseLife();this.consecutiveWrong=0}}
+        }
+        BM.updatePips('#stbar',this.streak,'#stval');this.updateHUD();
+    },
+
+    loseLife(){this.lives--;BM.drawLives('#h-lives',this.lives,this.maxLives,'sm');if(this.lives<=0)this.end()},
+
+    updateHUD(){
+        document.getElementById('h-sc').textContent=this.score;
+        const total=this.hits+this.wrongShots;const acc=total>0?Math.round(this.hits/total*100):0;
+        document.getElementById('h-ac').textContent=acc+'%';
+        if(this.timed)document.getElementById('h-tm').textContent=this.timeLeft;
+    },
+
+    end(){
+        this.active=false;this.paused=false;
+        this.scheduler.clear(this.spawnI);this.scheduler.clear(this.timerI);this.scheduler.clear(this.elapsedI);this.scheduler.clear(this.ruleI);
+        document.getElementById('arena').innerHTML='';
+        document.getElementById('hud').classList.remove('on');document.getElementById('rule-wrap').classList.remove('on');document.getElementById('stwrap').classList.remove('on');
+        if(this.qs && this.qs.btn) this.qs.btn.classList.remove('on');
+
+        const total=this.hits+this.wrongShots;
+        const acc=total>0?Math.round(this.hits/total*100):0;
+        const avgRt=this.reactionTimes.length>0?Math.round(this.reactionTimes.reduce((a,b)=>a+b,0)/this.reactionTimes.length):0;
+        // Duration in minutes: use elapsed (counts up every second) or the
+        // configured duration, whichever is sensible. Floor at a few seconds.
+        const durSec = Math.max(this.clock.now()/1000,.001);
+        const durMin = durSec/60;
+        // Primary metric: valid targets processed per minute
+        const hitsPerMin = durMin>0 ? Math.round(this.hits/durMin) : 0;
+
+        document.getElementById('r-mode').textContent =
+            (this.mode==='survival'?I18N.t('ng.survover'):I18N.t('m.complete'));
+        document.getElementById('r-primary').textContent=hitsPerMin;
+        document.getElementById('r-acc').textContent=acc+'%';
+        document.getElementById('r-rt').textContent=avgRt+'ms';
+
+        // ── Persist BEFORE comparison; bucket by difficulty (or survival).
+        //    Gate on accuracy: spamming clicks shouldn't inflate hits/min. ──
+        const bucket = this.mode==='survival' ? 'surv' : (this.diff || 'custom');
+        const bestKey = 'hpm_' + bucket;
+        const priorBest = Store.getBest(MODULE, bestKey);
+        const qualifies = acc>=70 && this.hits>=3;
+
+        Store.saveSession(MODULE,{
+            mode:this.mode, diff:this.diff, hitsPerMin, acc, avgRt,
+            hits:this.hits, wrongShots:this.wrongShots, missedValid:this.missedValid,
+            maxStreak:this.maxStreak, score:this.score
+        });
+        if(qualifies) Store.saveBest(MODULE, bestKey, hitsPerMin, true);
+        Store.saveBest(MODULE, 'score', this.score, true);  // legacy
+
+        // ── Comparison line ──
+        const cmpEl=document.getElementById('r-compare');
+        const bucketLabel = this.mode==='survival' ? (I18N.lang==='es'?'supervivencia':'survival') : (this.diff ? I18N.t('m.'+this.diff).toLowerCase() : I18N.t('m.custom').replace('…','').toLowerCase());
+        if(total===0){
+            cmpEl.className='res-compare worse';
+            cmpEl.innerHTML='<span class="ar">—</span> ' + I18N.t('ng.noshots');
+        } else if(!qualifies){
+            cmpEl.className='res-compare worse';
+            cmpEl.innerHTML='<span class="ar">!</span> ' + I18N.t('ng.acclow');
+        } else if(priorBest===null||priorBest===undefined){
+            cmpEl.className='res-compare record';
+            cmpEl.innerHTML=`<span class="ar">★</span> ${I18N.lang==='es'?'Primera sesión '+bucketLabel+' — tu base':'First '+bucketLabel+' session — your baseline'}`;
+        } else {
+            const diff = hitsPerMin - priorBest;
+            if(diff>0){
+                cmpEl.className='res-compare record';
+                cmpEl.innerHTML=`<span class="ar">▲</span> ${I18N.t('m.res.newbest')} · +${diff}/min ${I18N.t('ng.over')}`;
+            } else if(diff===0){
+                cmpEl.className='res-compare better';
+                cmpEl.innerHTML=`<span class="ar">=</span> ${I18N.t('m.res.matched')} (${priorBest}/min)`;
+            } else {
+                cmpEl.className='res-compare worse';
+                cmpEl.innerHTML=`<span class="ar">▾</span> ${Math.abs(diff)}/min ${I18N.t('ng.below')} (${priorBest})`;
+            }
+        }
+
+        // ── Evolution (same bucket, accuracy-qualified) ──
+        this.renderEvolution(bucket, hitsPerMin);
+
+        // ── Details ──
+        document.getElementById('r-details').innerHTML =
+            `<span>${I18N.t('ng.d.correct')} <b>${this.hits}</b></span>` +
+            `<span>${I18N.t('ng.d.wrong')} <b>${this.wrongShots}</b></span>` +
+            `<span>${I18N.t('ng.d.missed')} <b>${this.missedValid}</b></span>` +
+            `<span>${I18N.t('ng.d.beststreak')} <b>${this.maxStreak}</b></span>`;
+
+        document.getElementById('res').classList.remove('hide');
+    },
+
+    renderEvolution(bucket, currentHpm){
+        const bars=document.getElementById('r-evo-bars');
+        const bestSpan=document.getElementById('r-evo-best');
+        const all=Store.getSessions(MODULE)||[];
+        const sameKind=all.filter(s=>{
+            const b = s.mode==='survival' ? 'surv' : (s.diff || 'custom');
+            return b===bucket && typeof s.hitsPerMin==='number' && s.acc>=70;
+        }).slice(-12);
+        if(sameKind.length===0){
+            bars.innerHTML=`<div class="res-evo-empty">${I18N.t('ng.evoempty')}</div>`;
+            bestSpan.textContent='';
+            return;
+        }
+        const max=Math.max(...sameKind.map(s=>s.hitsPerMin),currentHpm,1);
+        bestSpan.textContent=I18N.t('m.res.best')+' '+max+'/min';
+        bars.innerHTML='';
+        sameKind.forEach((s,i)=>{
+            const bar=document.createElement('div');
+            bar.className='res-evo-bar'+(i===sameKind.length-1?' latest':'');
+            bar.style.height='0%';
+            bar.title=s.hitsPerMin+'/min · '+s.acc+'%';
+            bars.appendChild(bar);
+            const h=(s.hitsPerMin/max)*100;
+            this.scheduler.requestAnimationFrame(()=>{ bar.style.height=Math.max(5,h)+'%'; });
+        });
+    }
+};
+if(!Snd.on) document.getElementById('snd-btn').textContent='♪ OFF';
+
+// Initialize difficulty preset (medium) — syncs complexity/spawn/life rows + summary
+UI.setDiff('medium', document.querySelector('#t-diff .pb.on'));
+UI.refreshSummary();
+
+// Re-render dynamic text on language change. The active rule banner is
+// rebuilt from its render() so the rule words switch language live without
+// changing which targets are valid.
+window.addEventListener('langchange', () => {
+    UI.refreshSummary();
+    UI.setChallenge(UI.challenge, document.querySelector('#t-challenge .pb.on'));
+    if(Game.active && Game.rule && Game.rule.render){
+        const rt=document.getElementById('rule-text');
+        if(rt) rt.innerHTML=Game.rule.render();
+    }
+});
+
+// Quick switcher — pause + module nav
+BM.attachTraining({module:MODULE,game:Game,ui:UI,start:'launch',finish:'end'});
+Game.qs = BM.mountQuickSwitcher({
+    current: MODULE,
+    onPause:  () => Game.pause(),
+    onResume: () => Game.resume(),
+    onExit:   () => Game.exit()
+});
+</script>
+</body>
+</html>

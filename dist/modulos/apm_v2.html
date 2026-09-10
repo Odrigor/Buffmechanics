@@ -1,0 +1,679 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BuffMechanics | APM Burst</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' fill='%23ef4444'/%3E%3Ctext x='50%25' y='54%25' text-anchor='middle' dominant-baseline='middle' font-family='monospace' font-size='40' font-weight='700' fill='%23ffffff'%3EB%3C/text%3E%3Crect x='2' y='2' width='60' height='60' fill='none' stroke='%23ffffff' stroke-width='3'/%3E%3C/svg%3E">
+    <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="../assets/shared.css">
+    <style>
+        :root{
+            --accent:#ef4444;
+            --accent-dim:rgba(239,68,68,.12);
+            --perfect:#a855f7;
+        }
+        body{height:100vh;overflow:hidden}
+
+        #arena{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10}
+
+        /* BPM indicator */
+        .bpm-display{position:fixed;top:60px;left:50%;transform:translateX(-50%);z-index:100;pointer-events:none;opacity:0;transition:opacity .3s;text-align:center}
+        .bpm-display.on{opacity:1}
+        .bpm-val{font-size:48px;font-weight:700;line-height:1;transition:color .2s}
+        .bpm-label{font-family:'Space Mono',monospace;font-size:8px;color:var(--t3);letter-spacing:.15em}
+
+        /* Command key */
+        .cmd-wrap{display:flex;flex-direction:column;align-items:center;gap:16px}
+        .cmd-key{font-size:120px;font-weight:700;line-height:1;color:var(--t1);transition:all .08s;min-height:140px;display:flex;align-items:center;justify-content:center}
+        .cmd-key.correct{color:var(--hit);transform:scale(1.15)}
+        .cmd-key.wrong{color:var(--miss);transform:translateX(-8px)}
+        .cmd-key.perfect{color:var(--perfect);transform:scale(1.2);text-shadow:0 0 30px var(--perfect)}
+
+        .timing-fb{font-family:'Space Mono',monospace;font-size:12px;font-weight:700;min-height:18px;letter-spacing:.1em;transition:opacity .15s}
+
+        /* Keys row */
+        .keys-row{position:fixed;bottom:40px;left:50%;transform:translateX(-50%);display:flex;gap:8px;z-index:100;pointer-events:none;opacity:0;transition:opacity .3s}
+        .keys-row.on{opacity:1}
+        .key-box{width:52px;height:52px;background:var(--sf);border:1px solid var(--bd);display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:700;color:var(--t3);transition:all .1s;font-family:'Space Mono',monospace}
+        .key-box.active{border-color:var(--accent);color:var(--accent);background:var(--accent-dim);box-shadow:0 0 12px var(--accent-dim)}
+        .key-box.hit{border-color:var(--hit);color:var(--hit);background:rgba(0,255,136,.1)}
+        .key-box.miss{border-color:var(--miss);color:var(--miss);background:rgba(255,34,85,.1)}
+
+        /* Beat row */
+        .beat-row{position:fixed;top:52px;left:0;right:0;height:3px;z-index:100;display:flex;pointer-events:none;opacity:0;transition:opacity .3s}
+        .beat-row.on{opacity:1}
+        .beat-pip{flex:1;height:100%;background:var(--t3);transition:all .08s}
+        .beat-pip.on{background:var(--accent);box-shadow:0 0 6px var(--accent)}
+
+        /* Combo */
+        .combo-wrap{position:fixed;bottom:100px;left:50%;transform:translateX(-50%);z-index:100;pointer-events:none;opacity:0;transition:all .2s;text-align:center}
+        .combo-wrap.on{opacity:1}
+        .combo-val{font-size:28px;font-weight:700;transition:all .1s}
+
+        @keyframes shake{0%,100%{transform:translateX(0)}20%{transform:translateX(-10px)}40%{transform:translateX(8px)}60%{transform:translateX(-5px)}80%{transform:translateX(3px)}}
+
+        /* ═══ Quick Start + Tune ═══ */
+        .qs-card{display:flex;flex-direction:column;align-items:center;max-width:440px;width:100%;margin:0 auto}
+        .qs-mode{width:100%;text-align:center;background:var(--sf);border:1px solid var(--bd);padding:18px 20px;margin-bottom:12px;transition:border-color .2s}
+        .qs-mode-label{font-family:'Space Mono',monospace;font-size:9px;letter-spacing:.18em;color:var(--t3);text-transform:uppercase;margin-bottom:6px}
+        .qs-mode-value{font-size:24px;font-weight:700;letter-spacing:.02em;color:var(--t1);line-height:1}
+        .qs-mode-sub{font-family:'Space Mono',monospace;font-size:10px;color:var(--t2);margin-top:6px;letter-spacing:.04em}
+        .tune-toggle{width:100%;display:flex;align-items:center;justify-content:center;gap:8px;background:none;border:1px solid var(--bd);color:var(--t2);font-family:'Space Mono',monospace;font-size:10px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;padding:10px;cursor:pointer;margin-bottom:12px;transition:all .2s}
+        .tune-toggle:hover{border-color:var(--t2);color:var(--t1)}
+        .tune-toggle .chev{transition:transform .3s;display:inline-block}
+        .tune-toggle.open .chev{transform:rotate(90deg)}
+        .tune-panel{width:100%;overflow:hidden;max-height:0;opacity:0;transition:max-height .35s cubic-bezier(.4,0,.2,1),opacity .25s,margin .35s;margin-bottom:0}
+        .tune-panel.open{max-height:900px;opacity:1;margin-bottom:12px}
+        .tune-inner{background:var(--sf);border:1px solid var(--bd);padding:18px 18px 14px}
+        .tune-adv-divider{display:flex;align-items:center;gap:10px;margin:16px 0 12px;font-family:'Space Mono',monospace;font-size:8px;letter-spacing:.16em;color:var(--t3);text-transform:uppercase}
+        .tune-adv-divider::before,.tune-adv-divider::after{content:'';flex:1;height:1px;background:var(--bd)}
+
+        /* ═══ Redesigned results ═══ */
+        .res-metric{text-align:center;margin-bottom:6px}
+        .res-metric-value{font-size:56px;font-weight:700;color:var(--accent);line-height:1;letter-spacing:-1px}
+        .res-metric-unit{font-size:22px;color:var(--t2);font-weight:700;margin-left:4px}
+        .res-metric-label{font-family:'Space Mono',monospace;font-size:9px;letter-spacing:.16em;color:var(--t3);text-transform:uppercase;margin-top:6px}
+        .res-compare{text-align:center;font-family:'Space Mono',monospace;font-size:12px;letter-spacing:.04em;margin:14px 0;min-height:20px}
+        .res-compare.better{color:var(--hit)}
+        .res-compare.worse{color:var(--t2)}
+        .res-compare.record{color:var(--perfect,#eab308)}
+        .res-compare .ar{font-weight:700;margin-right:4px}
+        .res-evo{margin:16px 0;padding:0 4px}
+        .res-evo-title{font-family:'Space Mono',monospace;font-size:8px;letter-spacing:.16em;color:var(--t3);text-transform:uppercase;margin-bottom:8px;display:flex;justify-content:space-between}
+        .res-evo-bars{display:flex;align-items:flex-end;gap:3px;height:54px}
+        .res-evo-bar{flex:1;background:var(--accent);opacity:.35;min-height:3px;border-radius:1px;transition:height .4s cubic-bezier(.4,0,.2,1),opacity .2s}
+        .res-evo-bar.latest{opacity:.95}
+        .res-evo-bar:hover{opacity:1}
+        .res-evo-empty{font-family:'Space Mono',monospace;font-size:9px;color:var(--t3);text-align:center;padding:18px 0;letter-spacing:.1em}
+        .res-details{display:flex;justify-content:center;gap:18px;flex-wrap:wrap;font-family:'Space Mono',monospace;font-size:10px;color:var(--t2);margin:14px 0;letter-spacing:.04em}
+        .res-details b{color:var(--t1);font-weight:700}
+    </style>
+<link rel="stylesheet" href="../assets/experience.css">
+<link rel="stylesheet" href="../assets/workspace.css">
+</head>
+<body>
+<div id="arena"></div>
+
+<div class="beat-row" id="beat-row"></div>
+
+<!-- HUD -->
+<div class="hud" id="hud">
+    <div class="hb"><span class="hl" data-i18n="apm.score">Score</span><span class="hv" style="color:var(--accent)" id="h-sc">0</span></div>
+    <div class="hb c">
+        <div class="tpill"><div class="tdot" id="h-tdot"></div><span class="hv" id="h-tm" style="font-size:20px">60</span></div>
+        <div class="lives" id="h-lives" style="margin-top:4px"></div>
+    </div>
+    <div class="hb r"><span class="hl" data-i18n="apm.accuracy">Accuracy</span><span class="hv" id="h-ac">100%</span></div>
+</div>
+
+<!-- BPM -->
+<div class="bpm-display" id="bpm-wrap">
+    <div class="bpm-val" id="bpm-val">120</div>
+    <div class="bpm-label">BPM</div>
+</div>
+
+<!-- COMMAND -->
+<div style="position:fixed;inset:0;display:flex;align-items:center;justify-content:center;z-index:10;pointer-events:none">
+    <div class="cmd-wrap">
+        <div class="cmd-key" id="cmd-key">—</div>
+        <div class="timing-fb" id="timing-fb"></div>
+    </div>
+</div>
+
+<!-- COMBO -->
+<div class="combo-wrap" id="combo-wrap">
+    <div class="combo-val" id="combo-val">×1</div>
+</div>
+
+<!-- KEYS ROW -->
+<div class="keys-row" id="keys-row"></div>
+
+<!-- SETUP -->
+<div class="setup" id="setup">
+    <button class="snd-toggle" id="snd-btn" onclick="Snd.toggle()">♪ ON</button>
+    <div class="setup-logo">APM</div>
+    <div class="stitle">APM <em>BURST</em></div>
+    <div class="ssub" data-i18n="apm.sub">Hit keys in time with the beat · trains keystroke speed + rhythm</div>
+
+    <div class="qs-card">
+        <div class="qs-mode" id="qs-mode">
+            <div class="qs-mode-label" data-i18n="m.mode">Mode</div>
+            <div class="qs-mode-value" id="qs-mode-value">60 seconds</div>
+            <div class="qs-mode-sub" id="qs-mode-sub">6 keys · starts at 60 BPM · climbs as you hit</div>
+        </div>
+
+        <button class="tune-toggle" id="tune-toggle" onclick="UI.toggleTune()">
+            <span class="chev">▸</span> <span data-i18n="m.tune">Tune</span>
+        </button>
+
+        <div class="tune-panel" id="tune-panel">
+            <div class="tune-inner">
+                <!-- Key set -->
+                <div class="pgroup"><div class="plabel" data-i18n="apm.keyset">Key set</div>
+                    <div class="pbtn-row" id="t-keyset">
+                        <button class="pb" onclick="UI.setKeyset('easy',this)">QWER</button>
+                        <button class="pb on" onclick="UI.setKeyset('medium',this)">QWERAS</button>
+                        <button class="pb" onclick="UI.setKeyset('hard',this)">QWERASDF</button>
+                        <button class="pb" onclick="UI.setKeyset('custom',this)" data-i18n="m.custom">Custom…</button>
+                    </div>
+                    <div class="sub-row" id="t-keys-input" style="display:none;margin-top:8px">
+                        <span class="sub-label" data-i18n="apm.keys.label">Keys</span>
+                        <input type="text" class="num-input" id="cst-keys" maxlength="12" style="width:140px;text-transform:uppercase" value="QWER" oninput="UI.updCustomKeys()">
+                        <span class="sub-label" id="cst-keys-count">4 keys</span>
+                    </div>
+                </div>
+
+                <!-- Duration -->
+                <div class="pgroup"><div class="plabel" data-i18n="m.duration">Duration</div>
+                    <div class="pbtn-row" id="t-time">
+                        <button class="pb" onclick="UI.setTime(30,this)">30s</button>
+                        <button class="pb on" onclick="UI.setTime(60,this)">60s</button>
+                        <button class="pb" onclick="UI.setTime(90,this)">90s</button>
+                        <button class="pb" onclick="UI.setTime(0,this)">∞</button>
+                    </div>
+                </div>
+
+                <!-- ── Advanced ── -->
+                <div class="tune-adv-divider" data-i18n="m.advanced">Advanced</div>
+
+                <div class="pgroup"><div class="plabel" data-i18n="apm.startbpm">Starting BPM</div>
+                    <div class="slider-wrap">
+                        <span class="mono" style="font-size:9px;color:var(--t3)" data-i18n="m.slow">Slow</span>
+                        <input type="range" id="sl-bpm" min="40" max="150" value="60" step="5" oninput="UI.updBpm()">
+                        <span class="mono" style="font-size:9px;color:var(--t3)" data-i18n="m.fast">Fast</span>
+                        <span class="slider-val" id="sl-bpm-v">60</span>
+                    </div>
+                </div>
+                <div class="pgroup"><div class="plabel" data-i18n="apm.growth">BPM growth per correct hit</div>
+                    <div class="slider-wrap">
+                        <span class="mono" style="font-size:9px;color:var(--t3)" data-i18n="m.none">None</span>
+                        <input type="range" id="sl-grow" min="0" max="2" value="0.5" step="0.1" oninput="UI.updGrow()">
+                        <span class="mono" style="font-size:9px;color:var(--t3)" data-i18n="m.fast">Fast</span>
+                        <span class="slider-val" id="sl-grow-v">0.5</span>
+                    </div>
+                    <div class="mono" style="font-size:9px;color:var(--t3);margin-top:6px;line-height:1.5">
+                        <span data-i18n="apm.growth.hint">Higher growth = the beat speeds up faster as you nail hits. The climb is the challenge.</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <button class="gobtn" style="width:100%" onclick="Game.launch()" data-i18n="m.start">▶ START</button>
+        <button class="gobtn-back" onmouseenter="Snd.tick(660)" onclick="BM.backToHome()" data-i18n="m.back">← BACK TO MENU</button>
+    </div>
+
+    <div class="hint" data-i18n="apm.hint">Press the displayed key in time with the beat. Stay on rhythm.</div>
+</div>
+
+<!-- RESULTS -->
+<div class="res hide" id="res">
+    <div class="rcard">
+        <div class="hl" id="r-mode-label" style="text-align:center;margin-bottom:10px">SESSION COMPLETE</div>
+
+        <!-- Primary metric: peak BPM -->
+        <div class="res-metric">
+            <span class="res-metric-value" id="r-primary">0</span><span class="res-metric-unit">bpm</span>
+            <div class="res-metric-label" data-i18n="apm.metric">Peak sustained tempo</div>
+        </div>
+
+        <!-- Comparison -->
+        <div class="res-compare" id="r-compare"></div>
+
+        <!-- Evolution -->
+        <div class="res-evo">
+            <div class="res-evo-title"><span data-i18n="m.recent">Recent sessions</span><span id="r-evo-best"></span></div>
+            <div class="res-evo-bars" id="r-evo-bars"></div>
+        </div>
+
+        <!-- Details -->
+        <div class="res-details" id="r-details"></div>
+
+        <div class="rbtns">
+            <button class="rb-s" onclick="location.href='../index.html'" data-i18n="m.exit">EXIT</button>
+            <button class="rb-s" onclick="Game.toSetup()" data-i18n="m.menu">MENU</button>
+            <button class="rb-p" onclick="Game.retry()" data-i18n="m.retry">RETRY</button>
+        </div>
+    </div>
+</div>
+
+<script src="../assets/i18n.js"></script>
+<script src="../assets/shared.js"></script>
+<script src="../assets/history.js"></script>
+<script src="../assets/training-core.js"></script>
+<script src="../assets/routine.js"></script>
+<script src="../assets/experience.js"></script>
+<script>
+const MODULE='apm';
+
+const KEY_SETS={
+    easy:['Q','W','E','R'],
+    medium:['Q','W','E','R','A','S'],
+    hard:['Q','W','E','R','A','S','D','F']
+};
+
+const UI={
+    keyset:'medium', customKeys:'QWER',
+    bpm:60, grow:0.5, time:60,
+    tuneOpen:false,
+
+    toggleTune(){
+        this.tuneOpen=!this.tuneOpen;
+        document.getElementById('tune-toggle').classList.toggle('open',this.tuneOpen);
+        document.getElementById('tune-panel').classList.toggle('open',this.tuneOpen);
+        Snd.tick(370);
+    },
+
+    setKeyset(k,btn){
+        this.keyset=k;BM.selectPb(btn);
+        document.getElementById('t-keys-input').style.display=k==='custom'?'flex':'none';
+        this.refreshSummary();
+    },
+    setTime(v,btn){this.time=v;BM.selectPb(btn);this.refreshSummary()},
+
+    updCustomKeys(){
+        const el=document.getElementById('cst-keys');
+        const seen=new Set();
+        const cleaned=[...el.value.toUpperCase()]
+            .filter(c=>/[A-Z0-9]/.test(c))
+            .filter(c=>{if(seen.has(c))return false;seen.add(c);return true})
+            .slice(0,12).join('');
+        el.value=cleaned;
+        this.customKeys=cleaned;
+        document.getElementById('cst-keys-count').textContent=cleaned.length+' '+(cleaned.length===1?I18N.t('apm.key.unit'):I18N.t('apm.keys.unit'));
+        this.refreshSummary();
+    },
+    updBpm(){
+        const v=parseInt(document.getElementById('sl-bpm').value);
+        this.bpm=v;
+        document.getElementById('sl-bpm-v').textContent=v;
+        this.refreshSummary();
+    },
+    updGrow(){
+        const v=parseFloat(document.getElementById('sl-grow').value);
+        this.grow=v;
+        document.getElementById('sl-grow-v').textContent=v.toFixed(1);
+    },
+
+    // Returns the active key array
+    keys(){
+        if(this.keyset==='custom'){
+            return this.customKeys.length>=2 ? [...this.customKeys] : KEY_SETS.easy;
+        }
+        return KEY_SETS[this.keyset];
+    },
+
+    keyCount(){ return this.keys().length; },
+
+    refreshSummary(){
+        const n=this.keyCount();
+        document.getElementById('qs-mode-value').textContent =
+            this.time===0 ? I18N.t('m.endless') : this.time + (I18N.lang==='es'?' segundos':' seconds');
+        const growTxt = this.grow > 0 ? I18N.t('apm.climbs') : I18N.t('apm.fixed');
+        document.getElementById('qs-mode-sub').textContent =
+            `${n} ${I18N.t('apm.keys.unit')} · ${I18N.t('apm.sub.tmpl')} ${this.bpm} BPM · ${growTxt}`;
+    }
+};
+
+const Game={
+    active:false, paused:false, mode:'',lastMode:'',
+    keys:[],currentKey:'',bpm:140,
+    bpmGrowth:0.15,            // BPM added per correct hit (mode-dependent)
+    score:0,hits:0,misses:0,combo:0,maxCombo:0,
+    maxBpm:0,peakApm:0,
+    lives:0,maxLives:0,timeLeft:0,
+    startTime:0,pausedAt:0,pausedAccum:0,     // tracked so peak APM stays fair
+    clickCount:0,
+    beatI:null,timerI:null,beatStep:0,
+    lastBeatTime:0,inputWindow:false,responded:false,
+    timed:true,
+    qs:null,
+
+    buildKeys(){
+        const row=document.getElementById('keys-row');row.innerHTML='';
+        this.keys.forEach(k=>{
+            const box=document.createElement('div');box.className='key-box';box.id='kb-'+k;box.textContent=k;
+            row.appendChild(box);
+        });
+    },
+
+    buildBeatRow(){
+        const row=document.getElementById('beat-row');row.innerHTML='';
+        for(let i=0;i<16;i++){const p=document.createElement('div');p.className='beat-pip';row.appendChild(p)}
+    },
+
+    launch(){
+        Snd.init();
+        this.mode='burst';
+        this.score=0;this.hits=0;this.misses=0;this.combo=0;this.maxCombo=0;
+        this.peakApm=0;this.clickCount=0;this.beatStep=0;
+        this.startTime=this.clock.now();this.pausedAccum=0;this.responded=true;this.currentKey=null;
+        this.paused=false;
+
+        this.keys=UI.keys();
+        this.keyCount=this.keys.length;
+        this.bpm=UI.bpm;
+        this.timed=UI.time!==0;
+        this.timeLeft=this.timed?UI.time:0;
+        this.lives=0;this.maxLives=0;
+        this.bpmGrowth=UI.grow;
+        this.maxBpm=0;this.sustained=[];this.active=true;
+
+        document.getElementById('setup').classList.add('hide');
+        document.getElementById('res').classList.add('hide');
+        document.getElementById('hud').classList.add('on');
+        document.getElementById('bpm-wrap').classList.add('on');
+        document.getElementById('keys-row').classList.add('on');
+        document.getElementById('beat-row').classList.add('on');
+
+        document.getElementById('h-tm').textContent=this.timed?this.timeLeft:'∞';
+        document.getElementById('h-tdot').style.background='var(--accent)';
+        BM.drawLives('#h-lives',this.lives,this.maxLives,'sm');
+        this.buildKeys();this.buildBeatRow();
+        this.updateHUD();
+        this.updateBpm();
+        if(this.qs && this.qs.btn) this.qs.btn.classList.add('on');
+        this.nextBeat();
+        if(this.timed)this.startTimer();
+    },
+
+    retry(){this.launch()},
+    toSetup(){
+        document.getElementById('res').classList.add('hide');
+        document.getElementById('setup').classList.remove('hide');
+        if(this.qs && this.qs.btn) this.qs.btn.classList.remove('on');
+    },
+
+    // ── Pause / Resume — beat stops, timer stops, keydown ignored.
+    //    On resume, a fresh beat is scheduled (no race conditions with input window). ──
+    pause(){
+        if(!this.active || this.paused)return;
+        this.paused=true;
+        this.pausedAt=this.clock.now();
+        this.scheduler.clear(this.beatI);
+        this.scheduler.clear(this.timerI);
+        // Visual: dim the command key, freeze beat pip, clear input window
+        this.inputWindow=false;
+        this.responded=true;   // prevents auto-miss on next nextBeat
+        const cmdEl=document.getElementById('cmd-key');
+        cmdEl.textContent='⏸';
+        cmdEl.className='cmd-key';
+        cmdEl.style.color='var(--t2)';
+        document.getElementById('timing-fb').textContent='';
+        // Clear active highlight on keys
+        document.querySelectorAll('.key-box').forEach(kb=>kb.className='key-box');
+    },
+    resume(){
+        if(!this.active || !this.paused)return;
+        // Account for time spent paused so APM doesn't get penalized
+        this.pausedAccum += this.clock.now() - this.pausedAt;
+        this.paused=false;
+        const cmdEl=document.getElementById('cmd-key');
+        cmdEl.style.color='';
+        this.responded=false;
+        this.nextBeat();
+        if(this.timed && this.timeLeft>0)this.startTimer();
+    },
+    exit(){
+        this.active=false;this.paused=false;
+        this.scheduler.clear(this.beatI);this.scheduler.clear(this.timerI);
+    },
+
+    nextBeat(){
+        if(!this.active || this.paused)return;
+
+        if(this.responded===false&&this.currentKey!==null){
+            this.registerMiss();
+        }
+
+        if(!this.active)return;
+        this.currentKey=this.keys[Math.floor(Math.random()*this.keys.length)];
+        const cmdEl=document.getElementById('cmd-key');
+        cmdEl.textContent=this.currentKey;
+        cmdEl.className='cmd-key';
+        cmdEl.style.color='';
+        document.getElementById('timing-fb').textContent='';
+
+        this.keys.forEach(k=>{
+            const kb=document.getElementById('kb-'+k);
+            if(kb)kb.className='key-box'+(k===this.currentKey?' active':'');
+        });
+
+        const pips=document.querySelectorAll('.beat-pip');
+        pips.forEach(p=>p.classList.remove('on'));
+        pips[this.beatStep%pips.length].classList.add('on');
+        this.beatStep++;
+        Snd.warn();
+
+        this.responded=false;
+        this.lastBeatTime=this.clock.now();
+        this.inputWindow=true;
+
+        const msPerBeat=60000/this.bpm;
+        this.scheduler.setTimeout(()=>{this.inputWindow=false},msPerBeat*.8);
+        this.beatI=this.scheduler.setTimeout(()=>this.nextBeat(),msPerBeat);
+    },
+
+    handleKey(key){
+        if(!this.active || this.paused || this.responded)return;
+        const pressed=key.toUpperCase();
+        if(!this.keys.includes(pressed))return;
+
+        this.clickCount++;
+        this.responded=true;
+        const cmdEl=document.getElementById('cmd-key');
+        const fbEl=document.getElementById('timing-fb');
+        const kb=document.getElementById('kb-'+pressed);
+
+        if(pressed===this.currentKey&&this.inputWindow){
+            const dt=this.clock.now()-this.lastBeatTime;
+            const beatLen=60000/this.bpm;
+            const ratio=dt/beatLen;
+
+            let quality,color,pts;
+            if(ratio<.15){quality='PERFECT';color='var(--perfect)';pts=200}
+            else if(ratio<.35){quality='GREAT';color='var(--hit)';pts=150}
+            else if(ratio<.6){quality='GOOD';color='var(--warn)';pts=100}
+            else{quality='LATE';color='var(--t2)';pts=50}
+
+            this.hits++;this.combo++;
+            if(this.combo>this.maxCombo)this.maxCombo=this.combo;
+            this.score+=pts+this.combo*2;
+
+            cmdEl.className='cmd-key '+(ratio<.15?'perfect':'correct');
+            fbEl.textContent=quality;fbEl.style.color=color;
+            if(kb)kb.className='key-box hit';
+            if(ratio<.15) Snd.perfect(); else Snd.hit(Math.min(this.combo,10));
+
+            // BPM growth per correct hit — same code path for all modes,
+            // parametrized by bpmGrowth (0.15 standard / 1 survival / 0–2 custom)
+            this.sustained.push(this.bpm);if(this.sustained.length>10)this.sustained.shift();
+            if(this.sustained.length===10)this.maxBpm=Math.max(this.maxBpm,Math.min(...this.sustained));
+            this.bpm+=this.bpmGrowth;
+
+            if(this.mode==='survival'&&this.hits>0&&this.hits%50===0&&this.lives<this.maxLives){
+                this.lives++;BM.drawLives('#h-lives',this.lives,this.maxLives,'sm');
+            }
+        }else{
+            this.registerMiss();
+            cmdEl.className='cmd-key wrong';
+            cmdEl.style.animation='shake .25s ease';
+            this.scheduler.setTimeout(()=>cmdEl.style.animation='',250);
+            fbEl.textContent='MISS';fbEl.style.color='var(--miss)';
+            if(kb)kb.className='key-box miss';
+        }
+
+        this.updateHUD();
+        this.updateCombo();
+        this.updateBpm();
+    },
+
+    registerMiss(){
+        this.misses++;this.combo=0;this.sustained=[];
+        Snd.miss();
+        if(this.mode==='survival'){
+            this.lives--;BM.drawLives('#h-lives',this.lives,this.maxLives,'sm');
+            if(this.lives<=0)this.end();
+        }
+        this.updateCombo();
+    },
+
+    updateHUD(){
+        document.getElementById('h-sc').textContent=this.score;
+        const total=this.hits+this.misses;
+        const acc=total>0?Math.round(this.hits/total*100):0;
+        document.getElementById('h-ac').textContent=acc+'%';
+        if(this.timed)document.getElementById('h-tm').textContent=this.timeLeft;
+
+        // Effective elapsed time, excluding any time spent in pause
+        const effectiveMs=this.clock.now()-this.startTime-this.pausedAccum;
+        const elapsedMin=effectiveMs/60000;
+        if(elapsedMin>0){
+            const apm=Math.round(this.clickCount/elapsedMin);
+            if(apm>this.peakApm)this.peakApm=apm;
+        }
+    },
+
+    updateCombo(){
+        const cw=document.getElementById('combo-wrap');
+        const cv=document.getElementById('combo-val');
+        if(this.combo>1){
+            cw.classList.add('on');cv.textContent='×'+this.combo;
+            cv.style.color=this.combo>=20?'var(--perfect)':this.combo>=10?'var(--warn)':'var(--t1)';
+            cv.style.transform='scale(1.15)';
+            this.scheduler.setTimeout(()=>cv.style.transform='scale(1)',80);
+        }else{cw.classList.remove('on')}
+    },
+
+    updateBpm(){
+        const el=document.getElementById('bpm-val');
+        el.textContent=Math.round(this.bpm);
+        el.style.color=this.bpm>120?'var(--miss)':this.bpm>90?'var(--warn)':'var(--t1)';
+    },
+
+    startTimer(){this.timerI=this.scheduler.setInterval(()=>{this.timeLeft=Math.max(0,Math.ceil(this.sessionDuration-this.clock.now()/1000-(this.timePenalty||0)));document.getElementById('h-tm').textContent=this.timeLeft;if(this.timeLeft<=0)this.end()},1000)},
+
+    end(){
+        if(this.responded===false && this.currentKey && this.clock.now()-this.lastBeatTime>=48000/this.bpm){this.misses++;this.responded=true;}
+        this.active=false;this.paused=false;
+        this.scheduler.clear(this.beatI);this.scheduler.clear(this.timerI);
+        document.getElementById('hud').classList.remove('on');
+        document.getElementById('bpm-wrap').classList.remove('on');
+        document.getElementById('keys-row').classList.remove('on');
+        document.getElementById('beat-row').classList.remove('on');
+        document.getElementById('combo-wrap').classList.remove('on');
+        if(this.qs && this.qs.btn) this.qs.btn.classList.remove('on');
+
+        const total=this.hits+this.misses;
+        const acc=total>0?Math.round(this.hits/total*100):0;
+        const peakBpm=Math.round(this.maxBpm);
+
+        document.getElementById('r-mode-label').textContent =
+            this.keyCount + '-' + I18N.t('apm.keysuffix') + ' ' + I18N.t('apm.sesscomplete');
+
+        // Primary metric: peak BPM (the max sustained tempo reached)
+        document.getElementById('r-primary').textContent = peakBpm;
+
+        // ── Persist BEFORE comparison; record per key-count bucket ──
+        const bucket = this.keyCount + 'k';
+        const bestKey = 'peakbpm_' + bucket;
+        const priorBest = Store.getBest(MODULE, bestKey);
+
+        Store.saveSession(MODULE,{
+            keyCount:this.keyCount, peakBpm, peakApm:this.peakApm, acc,
+            maxBpm:peakBpm, hits:this.hits, maxCombo:this.maxCombo, score:this.score
+        });
+        Store.saveBest(MODULE, bestKey, peakBpm, true);
+        Store.saveBest(MODULE, 'score', this.score, true);  // legacy
+
+        // ── Comparison line ──
+        const cmpEl=document.getElementById('r-compare');
+        if(this.hits===0){
+            cmpEl.className='res-compare worse';
+            cmpEl.innerHTML='<span class="ar">—</span> ' + I18N.t('apm.nohits');
+        } else if(priorBest===null||priorBest===undefined){
+            cmpEl.className='res-compare record';
+            cmpEl.innerHTML=`<span class="ar">★</span> ${I18N.lang==='es'?'Primera sesión de '+this.keyCount+' teclas — tu base':'First '+this.keyCount+'-key session — your baseline'}`;
+        } else {
+            const diff = peakBpm - priorBest;
+            if(diff>0){
+                cmpEl.className='res-compare record';
+                cmpEl.innerHTML=`<span class="ar">▲</span> ${I18N.t('m.res.newbest')} · +${diff} BPM ${I18N.t('apm.over')}`;
+            } else if(diff===0){
+                cmpEl.className='res-compare better';
+                cmpEl.innerHTML=`<span class="ar">=</span> ${I18N.t('m.res.matched')} (${priorBest} BPM)`;
+            } else {
+                cmpEl.className='res-compare worse';
+                cmpEl.innerHTML=`<span class="ar">▾</span> ${Math.abs(diff)} BPM ${I18N.t('apm.below')} (${priorBest})`;
+            }
+        }
+
+        // ── Evolution (same key-count bucket) ──
+        this.renderEvolution(this.keyCount, peakBpm);
+
+        // ── Details ──
+        document.getElementById('r-details').innerHTML =
+            `<span>${I18N.t('apm.d.peak')} <b>${this.peakApm}</b></span>` +
+            `<span>${I18N.t('apm.d.accuracy')} <b>${acc}%</b></span>` +
+            `<span>${I18N.t('apm.d.hits')} <b>${this.hits}</b></span>` +
+            `<span>${I18N.t('apm.d.bestcombo')} <b>${this.maxCombo}</b></span>`;
+
+        document.getElementById('res').classList.remove('hide');
+    },
+
+    renderEvolution(keyCount, currentBpm){
+        const bars=document.getElementById('r-evo-bars');
+        const bestSpan=document.getElementById('r-evo-best');
+        const all=Store.getSessions(MODULE)||[];
+        const sameKind=all.filter(s=>s.keyCount===keyCount && typeof s.peakBpm==='number').slice(-12);
+        if(sameKind.length===0){
+            bars.innerHTML=`<div class="res-evo-empty">${I18N.t('apm.evoempty')}</div>`;
+            bestSpan.textContent='';
+            return;
+        }
+        const max=Math.max(...sameKind.map(s=>s.peakBpm),currentBpm,1);
+        bestSpan.textContent=I18N.t('m.res.best')+' '+max+' bpm';
+        bars.innerHTML='';
+        sameKind.forEach((s,i)=>{
+            const bar=document.createElement('div');
+            bar.className='res-evo-bar'+(i===sameKind.length-1?' latest':'');
+            bar.style.height='0%';
+            bar.title=s.peakBpm+' bpm';
+            bars.appendChild(bar);
+            const h=(s.peakBpm/max)*100;
+            this.scheduler.requestAnimationFrame(()=>{ bar.style.height=Math.max(5,h)+'%'; });
+        });
+    }
+};
+
+window.addEventListener('keydown',e=>{
+    if(e.repeat)return;
+    // If quick switcher is open, ignore game keys (overlay is taking input)
+    if(Game.qs && Game.qs.isOpen) return;
+    Game.handleKey(e.key);
+});
+if(!Snd.on) document.getElementById('snd-btn').textContent='♪ OFF';
+
+// Initialize tune readouts + summary
+UI.updBpm();
+UI.updGrow();
+UI.updCustomKeys();
+UI.refreshSummary();
+
+// Re-render dynamic text on language change (static data-i18n auto-updates)
+window.addEventListener('langchange', () => {
+    UI.refreshSummary();
+    UI.updCustomKeys();
+});
+
+// Quick switcher — pause + module nav
+BM.attachTraining({module:MODULE,game:Game,ui:UI,start:'launch',finish:'end'});
+Game.qs = BM.mountQuickSwitcher({
+    current: MODULE,
+    onPause:  () => Game.pause(),
+    onResume: () => Game.resume(),
+    onExit:   () => Game.exit()
+});
+</script>
+</body>
+</html>

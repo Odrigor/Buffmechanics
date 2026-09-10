@@ -1,0 +1,872 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BuffMechanics | Path Predict</title>
+     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' fill='%23a855f7'/%3E%3Ctext x='50%25' y='54%25' text-anchor='middle' dominant-baseline='middle' font-family='monospace' font-size='40' font-weight='700' fill='%23ffffff'%3EB%3C/text%3E%3Crect x='2' y='2' width='60' height='60' fill='none' stroke='%23ffffff' stroke-width='3'/%3E%3C/svg%3E">
+    <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="../assets/shared.css">
+    <style>
+        :root{
+            --accent:#a855f7;
+            --accent-dim:rgba(168,85,247,.12);
+            --close:#3b82f6;
+        }
+        body{height:100vh;overflow:hidden;cursor:crosshair}
+
+        #arena{position:fixed;inset:0;z-index:0;
+            background-image:linear-gradient(rgba(255,255,255,.015) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.015) 1px,transparent 1px);
+            background-size:60px 60px}
+
+        /* Pulse dots (trail) */
+        .pulse{position:absolute;border-radius:50%;transform:translate(-50%,-50%);pointer-events:none;z-index:10}
+        .pulse-core{width:100%;height:100%;border-radius:50%;transition:all .15s}
+
+        /* Prediction zone */
+        .pred-zone{position:fixed;inset:0;z-index:20;cursor:crosshair;display:none}
+
+        /* Module-specific crosshair (purple) */
+        #xhair::before,#xhair::after{background:rgba(168,85,247,.8) !important}
+
+        /* Result markers */
+        .marker{position:absolute;transform:translate(-50%,-50%);pointer-events:none;z-index:25;border-radius:50%}
+        .marker-actual{border:2px solid var(--hit);animation:mPulse .6s ease-out}
+        .marker-click{border:2px solid var(--accent)}
+        .marker-line{position:absolute;top:0;left:0;pointer-events:none;z-index:24}
+        @keyframes mPulse{0%{box-shadow:0 0 0 0 rgba(0,255,136,.4)}100%{box-shadow:0 0 0 20px rgba(0,255,136,0)}}
+
+        /* Feedback popup */
+        .fb-pop{position:absolute;transform:translate(-50%,-50%);pointer-events:none;z-index:30;font-family:'Space Mono',monospace;font-size:14px;font-weight:700;animation:fbUp .8s ease-out forwards}
+        @keyframes fbUp{0%{opacity:1;transform:translate(-50%,-50%) scale(1)}100%{opacity:0;transform:translate(-50%,-100%) scale(.8)}}
+
+        /* Phase text */
+        .phase-text{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:30;pointer-events:none;font-size:16px;font-weight:700;letter-spacing:.2em;color:var(--accent);opacity:0;transition:opacity .2s;font-family:'Space Mono',monospace}
+        .phase-text.on{opacity:1}
+
+        /* Timer bar */
+        .tbar{position:fixed;top:52px;left:0;right:0;height:2px;background:var(--bd);z-index:100;opacity:0;transition:opacity .3s}
+        .tbar.on{opacity:1}
+        .tbar-fill{height:100%;background:var(--accent);width:100%;transition:width linear,background-color .3s}
+
+        /* Round counter */
+        .round-info{position:fixed;bottom:16px;right:20px;z-index:100;pointer-events:none;opacity:0;transition:opacity .3s;text-align:right}
+        .round-info.on{opacity:1}
+
+        /* Setup rule card */
+        .rule-card{background:var(--sf);border:1px solid var(--bd);padding:12px 16px;max-width:480px;text-align:left}
+        .rule-title{font-family:'Space Mono',monospace;font-size:9px;color:var(--accent);letter-spacing:.14em;text-transform:uppercase;margin-bottom:4px}
+        .rule-desc{font-size:12px;color:var(--t1);line-height:1.5}
+        .rule-desc b{color:var(--accent)}
+
+        .rcard .rgrid:first-of-type{grid-template-columns:1fr 1fr 1fr}
+
+        /* ═══ Quick Start + Tune ═══ */
+        .qs-card{display:flex;flex-direction:column;align-items:center;max-width:440px;width:100%;margin:0 auto}
+        .qs-mode{width:100%;text-align:center;background:var(--sf);border:1px solid var(--bd);padding:18px 20px;margin-bottom:12px;transition:border-color .2s}
+        .qs-mode-label{font-family:'Space Mono',monospace;font-size:9px;letter-spacing:.18em;color:var(--t3);text-transform:uppercase;margin-bottom:6px}
+        .qs-mode-value{font-size:24px;font-weight:700;letter-spacing:.02em;color:var(--t1);line-height:1}
+        .qs-mode-sub{font-family:'Space Mono',monospace;font-size:10px;color:var(--t2);margin-top:6px;letter-spacing:.04em}
+        .tune-toggle{width:100%;display:flex;align-items:center;justify-content:center;gap:8px;background:none;border:1px solid var(--bd);color:var(--t2);font-family:'Space Mono',monospace;font-size:10px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;padding:10px;cursor:pointer;margin-bottom:12px;transition:all .2s}
+        .tune-toggle:hover{border-color:var(--t2);color:var(--t1)}
+        .tune-toggle .chev{transition:transform .3s;display:inline-block}
+        .tune-toggle.open .chev{transform:rotate(90deg)}
+        .tune-panel{width:100%;overflow:hidden;max-height:0;opacity:0;transition:max-height .35s cubic-bezier(.4,0,.2,1),opacity .25s,margin .35s;margin-bottom:0}
+        .tune-panel.open{max-height:1400px;opacity:1;margin-bottom:12px}
+        .tune-inner{background:var(--sf);border:1px solid var(--bd);padding:18px 18px 14px}
+        .tune-adv-divider{display:flex;align-items:center;gap:10px;margin:16px 0 12px;font-family:'Space Mono',monospace;font-size:8px;letter-spacing:.16em;color:var(--t3);text-transform:uppercase}
+        .tune-adv-divider::before,.tune-adv-divider::after{content:'';flex:1;height:1px;background:var(--bd)}
+
+        /* ═══ Redesigned results ═══ */
+        .res-metric{text-align:center;margin-bottom:6px}
+        .res-metric-value{font-size:56px;font-weight:700;color:var(--accent);line-height:1;letter-spacing:-1px}
+        .res-metric-unit{font-size:22px;color:var(--t2);font-weight:700;margin-left:4px}
+        .res-metric-label{font-family:'Space Mono',monospace;font-size:9px;letter-spacing:.16em;color:var(--t3);text-transform:uppercase;margin-top:6px}
+        .res-subduo{display:flex;justify-content:center;gap:28px;margin:10px 0 4px}
+        .res-subduo-item{text-align:center}
+        .res-subduo-v{font-size:22px;font-weight:700;line-height:1}
+        .res-subduo-l{font-family:'Space Mono',monospace;font-size:8px;letter-spacing:.14em;color:var(--t3);text-transform:uppercase;margin-top:4px}
+        .res-compare{text-align:center;font-family:'Space Mono',monospace;font-size:12px;letter-spacing:.04em;margin:14px 0;min-height:20px}
+        .res-compare.better{color:var(--hit)}
+        .res-compare.worse{color:var(--t2)}
+        .res-compare.record{color:var(--gold,#eab308)}
+        .res-compare .ar{font-weight:700;margin-right:4px}
+        .res-evo{margin:16px 0;padding:0 4px}
+        .res-evo-title{font-family:'Space Mono',monospace;font-size:8px;letter-spacing:.16em;color:var(--t3);text-transform:uppercase;margin-bottom:8px;display:flex;justify-content:space-between}
+        .res-evo-bars{display:flex;align-items:flex-end;gap:3px;height:50px}
+        .res-evo-bar{flex:1;background:var(--accent);opacity:.35;min-height:3px;border-radius:1px;transition:height .4s cubic-bezier(.4,0,.2,1),opacity .2s}
+        .res-evo-bar.latest{opacity:.95}
+        .res-evo-bar:hover{opacity:1}
+        .res-evo-empty{font-family:'Space Mono',monospace;font-size:9px;color:var(--t3);text-align:center;padding:14px 0;letter-spacing:.1em}
+        .res-details{display:flex;justify-content:center;gap:18px;flex-wrap:wrap;font-family:'Space Mono',monospace;font-size:10px;color:var(--t2);margin:14px 0;letter-spacing:.04em}
+        .res-details b{color:var(--t1);font-weight:700}
+    </style>
+<link rel="stylesheet" href="../assets/experience.css">
+<link rel="stylesheet" href="../assets/workspace.css">
+</head>
+<body>
+<div id="xhair" class="xhair"><div class="xhair-dot"></div></div>
+<div id="arena"></div>
+<div class="pred-zone" id="pred-zone"></div>
+<div class="phase-text" id="phase-text">OBSERVE</div>
+
+<div class="hud" id="hud">
+    <div class="hb"><span class="hl" data-i18n="pp.score">Score</span><span class="hv" style="color:var(--accent)" id="h-sc">0</span></div>
+    <div class="hb c">
+        <div class="tpill"><div class="tdot" id="h-tdot"></div><span class="hv" id="h-tm" style="font-size:20px">20</span></div>
+        <div class="lives" id="h-lives" style="margin-top:4px"></div>
+    </div>
+    <div class="hb r"><span class="hl" data-i18n="pp.accuracy">Accuracy</span><span class="hv" id="h-ac">—</span></div>
+</div>
+<div class="tbar" id="tbar"><div class="tbar-fill" id="tbar-fill"></div></div>
+
+<div class="streak-wrap" id="stwrap">
+    <div class="spips" id="stbar"></div>
+    <span class="slbl" id="stval">×0</span>
+</div>
+<div class="round-info" id="rinfo">
+    <div class="hl" data-i18n="pp.round">Round</div>
+    <div class="hv" id="h-round">1/20</div>
+</div>
+
+<div class="setup" id="setup">
+    <button class="snd-toggle" id="snd-btn" onclick="Snd.toggle()">♪ ON</button>
+    <div class="setup-logo">PTH</div>
+    <div class="stitle">PATH <em>PREDICT</em></div>
+    <div class="ssub" data-i18n="pp.sub">Trajectory anticipation training</div>
+    <div class="rule-card">
+        <div class="rule-title" data-i18n="pp.howtitle">HOW IT WORKS</div>
+        <div class="rule-desc" data-i18n-html="pp.howdesc">A target pulses across several positions revealing its <b>trajectory</b>. After it vanishes, <b>click where it will appear next</b>. The closer your click, the higher your score. Train your brain to read and extrapolate movement.</div>
+    </div>
+    <div class="qs-card">
+        <div class="qs-mode" id="qs-mode">
+            <div class="qs-mode-label" data-i18n="m.mode">Mode</div>
+            <div class="qs-mode-value" id="qs-mode-value">20 rounds</div>
+            <div class="qs-mode-sub" id="qs-mode-sub">Medium · read the path, predict where it lands</div>
+        </div>
+
+        <button class="tune-toggle" id="tune-toggle" onclick="UI.toggleTune()">
+            <span class="chev">▸</span> <span data-i18n="m.tune">Tune</span>
+        </button>
+
+        <div class="tune-panel" id="tune-panel">
+            <div class="tune-inner">
+                <!-- Difficulty preset -->
+                <div class="pgroup"><div class="plabel" data-i18n="m.difficulty">Difficulty</div>
+                    <div class="pbtn-row" id="t-diff">
+                        <button class="pb" onclick="UI.setDiff('easy',this)" data-i18n="m.easy">Easy</button>
+                        <button class="pb on" onclick="UI.setDiff('medium',this)" data-i18n="m.medium">Medium</button>
+                        <button class="pb" onclick="UI.setDiff('hard',this)" data-i18n="m.hard">Hard</button>
+                    </div>
+                    <div class="mono" style="font-size:9px;color:var(--t3);margin-top:6px;line-height:1.5">
+                        <span data-i18n="pp.diffhint">Higher difficulty adds harder trajectory types, fewer hint pulses, and a tighter tolerance.</span>
+                    </div>
+                </div>
+
+                <!-- Rounds -->
+                <div class="pgroup"><div class="plabel" data-i18n="m.rounds">Rounds</div>
+                    <div class="pbtn-row" id="t-rounds">
+                        <button class="pb" onclick="UI.setRounds(10,this)">10</button>
+                        <button class="pb on" onclick="UI.setRounds(20,this)">20</button>
+                        <button class="pb" onclick="UI.setRounds(30,this)">30</button>
+                        <button class="pb" onclick="UI.setRounds(0,this)">∞</button>
+                    </div>
+                </div>
+
+                <!-- ── Advanced ── -->
+                <div class="tune-adv-divider" data-i18n="m.advanced">Advanced</div>
+
+                <div class="pgroup"><div class="plabel" data-i18n="m.challenge">Challenge</div>
+                    <div class="pbtn-row" id="t-challenge">
+                        <button class="pb on" onclick="UI.setChallenge('normal',this)" data-i18n="m.normal">Normal</button>
+                        <button class="pb" onclick="UI.setChallenge('survival',this)" data-i18n="m.survival">Survival — 3 lives</button>
+                    </div>
+                    <div class="mono" style="font-size:9px;color:var(--t3);margin-top:6px;line-height:1.5" id="challenge-hint" data-i18n="pp.hint.normal">
+                        Normal: predict for the set number of rounds.
+                    </div>
+                </div>
+
+                <!-- Trajectory type checkboxes (multi-select, kept from original) -->
+                <div class="pgroup"><div class="plabel" data-i18n="pp.trajtypes">Trajectory types (select one or more)</div>
+                    <div id="cst-traj-checks"></div>
+                </div>
+
+                <div class="pgroup"><div class="plabel" data-i18n="pp.pulses">Pulses (points shown before predict)</div>
+                    <div class="pbtn-row" id="t-pulses">
+                        <button class="pb" onclick="UI.setPulses(3,this)">3</button>
+                        <button class="pb on" onclick="UI.setPulses(4,this)">4</button>
+                        <button class="pb" onclick="UI.setPulses(5,this)">5</button>
+                        <button class="pb" onclick="UI.setPulses(6,this)">6</button>
+                    </div>
+                </div>
+
+                <div class="pgroup"><div class="plabel" data-i18n="pp.tolerance">Tolerance radius</div>
+                    <div class="slider-wrap">
+                        <span class="mono" style="font-size:9px;color:var(--t3)" data-i18n="m.precise">Precise</span>
+                        <input type="range" id="sl-rad" min="25" max="100" value="55" step="5" oninput="UI.updRad()">
+                        <span class="mono" style="font-size:9px;color:var(--t3)" data-i18n="m.lenient">Lenient</span>
+                        <span class="slider-val" id="sl-rad-v">55</span>
+                    </div>
+                </div>
+
+                <div class="pgroup"><div class="plabel" data-i18n="pp.respwindow">Response window</div>
+                    <div class="slider-wrap">
+                        <span class="mono" style="font-size:9px;color:var(--t3)" data-i18n="m.short">Short</span>
+                        <input type="range" id="sl-resp" min="1500" max="5000" value="2500" step="100" oninput="UI.updResp()">
+                        <span class="mono" style="font-size:9px;color:var(--t3)" data-i18n="m.long">Long</span>
+                        <span class="slider-val" id="sl-resp-v">2.5s</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <button class="gobtn" style="width:100%" onclick="Game.launch()" data-i18n="m.start">▶ START</button>
+        <button class="gobtn-back" onmouseenter="Snd.tick(660)" onclick="BM.backToHome()" data-i18n="m.back">← BACK TO MENU</button>
+    </div>
+
+    <div class="hint" data-i18n="pp.hint">Read the movement. Predict the destination. Click precisely.</div>
+</div>
+
+<div class="res hide" id="res">
+    <div class="rcard">
+        <div class="hl" id="r-mode" style="text-align:center;margin-bottom:10px">SESSION COMPLETE</div>
+
+        <!-- Primary metric: prediction accuracy (perfect+close over total) -->
+        <div class="res-metric">
+            <span class="res-metric-value" id="r-primary">0</span><span class="res-metric-unit">%</span>
+            <div class="res-metric-label" data-i18n="pp.metric">Prediction accuracy</div>
+        </div>
+
+        <!-- Components -->
+        <div class="res-subduo">
+            <div class="res-subduo-item">
+                <div class="res-subduo-v" style="color:var(--hit)" id="r-perfectpct">0%</div>
+                <div class="res-subduo-l" data-i18n="pp.perfecthits">Perfect hits</div>
+            </div>
+            <div class="res-subduo-item">
+                <div class="res-subduo-v" style="color:var(--warn)" id="r-avgdist">0px</div>
+                <div class="res-subduo-l" data-i18n="pp.avgmiss">Avg miss distance</div>
+            </div>
+        </div>
+
+        <!-- Comparison -->
+        <div class="res-compare" id="r-compare"></div>
+
+        <!-- Evolution -->
+        <div class="res-evo">
+            <div class="res-evo-title"><span data-i18n="m.recent">Recent sessions</span><span id="r-evo-best"></span></div>
+            <div class="res-evo-bars" id="r-evo-bars"></div>
+        </div>
+
+        <!-- Details -->
+        <div class="res-details" id="r-details"></div>
+
+        <div class="rbtns">
+            <button class="rb-s" onclick="location.href='../index.html'" data-i18n="m.exit">EXIT</button>
+            <button class="rb-s" onclick="Game.toSetup()" data-i18n="m.menu">MENU</button>
+            <button class="rb-p" onclick="Game.retry()" data-i18n="m.retry">RETRY</button>
+        </div>
+    </div>
+</div>
+
+<script src="../assets/i18n.js"></script>
+<script src="../assets/shared.js"></script>
+<script src="../assets/history.js"></script>
+<script src="../assets/training-core.js"></script>
+<script src="../assets/routine.js"></script>
+<script src="../assets/experience.js"></script>
+<script>
+const MODULE='pathpredict';
+
+const TRAJ={
+    linear(pts,step){const last=pts[pts.length-1],prev=pts[pts.length-2];
+        return{x:last.x+(last.x-prev.x),y:last.y+(last.y-prev.y)}},
+    bounce(pts,step){const last=pts[pts.length-1],prev=pts[pts.length-2];
+        let dx=last.x-prev.x,dy=last.y-prev.y;
+        let nx=last.x+dx,ny=last.y+dy;const pad=60;
+        if(nx<pad||nx>innerWidth-pad)dx*=-1;
+        if(ny<120||ny>innerHeight-80)dy*=-1;
+        return{x:last.x+dx,y:last.y+dy}},
+    curve(pts,step,meta){const last=pts[pts.length-1],prev=pts[pts.length-2];
+        let dx=last.x-prev.x,dy=last.y-prev.y;
+        const ang=Math.atan2(dy,dx)+meta.curvature;
+        const spd=Math.sqrt(dx*dx+dy*dy);
+        return{x:last.x+Math.cos(ang)*spd,y:last.y+Math.sin(ang)*spd}},
+    zigzag(pts,step,meta){const last=pts[pts.length-1],prev=pts[pts.length-2];
+        let dx=last.x-prev.x,dy=last.y-prev.y;
+        if(step%2===0){const t=dx;dx=dy*.7;dy=-t*.7}
+        return{x:last.x+dx,y:last.y+dy}},
+    accel(pts,step,meta){const last=pts[pts.length-1],prev=pts[pts.length-2];
+        let dx=last.x-prev.x,dy=last.y-prev.y;
+        const factor=1+meta.accelRate;
+        return{x:last.x+dx*factor,y:last.y+dy*factor}}
+};
+
+const PRESETS={
+    easy:{types:['linear','bounce'],pulses:4,radius:80,responseMs:3000,dotSize:16,rounds:15},
+    medium:{types:['linear','bounce','curve','zigzag'],pulses:3,radius:55,responseMs:2500,dotSize:14,rounds:20},
+    hard:{types:['bounce','curve','zigzag','accel'],pulses:3,radius:35,responseMs:2000,dotSize:12,rounds:25}
+};
+
+const TRAJ_TYPES = [
+    {id:'linear',  i18n:'pp.traj.linear'},
+    {id:'bounce',  i18n:'pp.traj.bounce'},
+    {id:'curve',   i18n:'pp.traj.curve'},
+    {id:'zigzag',  i18n:'pp.traj.zigzag'},
+    {id:'accel',   i18n:'pp.traj.accel'}
+];
+
+const UI={
+    diff:'medium',
+    types:['linear','bounce','curve','zigzag'], pulses:3, radius:55, response:2500,
+    rounds:20,
+    challenge:'normal',
+    tuneOpen:false,
+
+    toggleTune(){
+        this.tuneOpen=!this.tuneOpen;
+        document.getElementById('tune-toggle').classList.toggle('open',this.tuneOpen);
+        document.getElementById('tune-panel').classList.toggle('open',this.tuneOpen);
+        Snd.tick(988);
+    },
+
+    // Difficulty preset sets types + pulses + radius + response together,
+    // syncing the checkboxes, the pulse buttons, and both sliders.
+    setDiff(k,btn){
+        this.diff=k;BM.selectPb(btn);
+        const p=PRESETS[k];
+        this.types=[...p.types];this.pulses=p.pulses;this.radius=p.radius;this.response=p.responseMs;
+        this.buildTrajChecks();
+        this._selectInRow('t-pulses', '('+p.pulses+',');
+        document.getElementById('sl-rad').value=p.radius;
+        document.getElementById('sl-rad-v').textContent=p.radius;
+        document.getElementById('sl-resp').value=p.responseMs;
+        document.getElementById('sl-resp-v').textContent=(p.responseMs/1000).toFixed(1)+'s';
+        this.refreshSummary();
+    },
+    setRounds(v,btn){this.rounds=v;BM.selectPb(btn);this.refreshSummary()},
+
+    setChallenge(c,btn){
+        this.challenge=c;BM.selectPb(btn);
+        document.getElementById('challenge-hint').textContent = c==='survival'
+            ? I18N.t('pp.hint.surv')
+            : I18N.t('pp.hint.normal');
+        this.refreshSummary();
+    },
+
+    setPulses(v,btn){this.pulses=v;BM.selectPb(btn);this.syncDiffHighlight();this.refreshSummary()},
+    updRad(){
+        this.radius=parseInt(document.getElementById('sl-rad').value);
+        document.getElementById('sl-rad-v').textContent=this.radius;
+        this.syncDiffHighlight();this.refreshSummary();
+    },
+    updResp(){
+        this.response=parseInt(document.getElementById('sl-resp').value);
+        document.getElementById('sl-resp-v').textContent=(this.response/1000).toFixed(1)+'s';
+        this.syncDiffHighlight();this.refreshSummary();
+    },
+
+    _selectInRow(rowId, match){
+        document.querySelectorAll('#'+rowId+' .pb').forEach(b=>{
+            b.classList.toggle('on', b.getAttribute('onclick').includes(match));
+        });
+    },
+
+    // If types+pulses+radius+response all match a preset exactly, highlight it
+    syncDiffHighlight(){
+        const typeKey=[...this.types].sort().join(',');
+        let matched='';
+        for(const [k,p] of Object.entries(PRESETS)){
+            if([...p.types].sort().join(',')===typeKey && p.pulses===this.pulses
+               && p.radius===this.radius && p.responseMs===this.response){ matched=k; break; }
+        }
+        this.diff=matched;
+        document.querySelectorAll('#t-diff .pb').forEach(b=>{
+            const k=b.getAttribute('onclick').match(/'(\w+)'/)[1];
+            b.classList.toggle('on',k===matched);
+        });
+    },
+
+    refreshSummary(){
+        const diffLabel = this.diff ? I18N.t('m.'+this.diff) : I18N.t('m.custom').replace('…','');
+        if(this.challenge==='survival'){
+            document.getElementById('qs-mode-value').textContent=I18N.t('m.survival').split(' —')[0];
+            document.getElementById('qs-mode-sub').textContent=`${diffLabel} ${I18N.t('pp.start')} · ${I18N.t('pp.lives3')} · ${I18N.t('pp.sub.surv')}`;
+        } else {
+            document.getElementById('qs-mode-value').textContent =
+                this.rounds===0 ? I18N.t('m.endless') : this.rounds+' '+I18N.t('time.d.rounds');
+            document.getElementById('qs-mode-sub').textContent=`${diffLabel} · ${I18N.t('pp.sub.normal')}`;
+        }
+    },
+
+    // Trajectory checks (multi-select with min 1) — manual edits de-sync the preset
+    buildTrajChecks(){
+        const c=document.getElementById('cst-traj-checks');
+        if(!c)return;
+        c.innerHTML='';
+        TRAJ_TYPES.forEach(t=>{
+            const d=document.createElement('div');
+            d.className='pcheck'+(this.types.includes(t.id)?' on':'');
+            d.innerHTML=`<div class="box">${this.types.includes(t.id)?'✓':''}</div><span>${I18N.t(t.i18n+'.name')}</span>`;
+            d.onclick=()=>{
+                const idx=this.types.indexOf(t.id);
+                if(idx>-1){if(this.types.length>1)this.types.splice(idx,1)}
+                else this.types.push(t.id);
+                d.classList.toggle('on',this.types.includes(t.id));
+                d.querySelector('.box').textContent=this.types.includes(t.id)?'✓':'';
+                this.syncDiffHighlight();
+                this.refreshSummary();
+            };
+            c.appendChild(d);
+            const desc=document.createElement('div');
+            desc.className='pcheck-desc';desc.textContent=I18N.t(t.i18n+'.desc');
+            c.appendChild(desc);
+        });
+    }
+};
+
+const Game={
+    active:false, paused:false, mode:'',lastMode:'',
+    cfg:null,round:0,maxRounds:20,
+    score:0,perfects:0,closes:0,misses:0,streak:0,maxStreak:0,
+    distances:[],lives:0,maxLives:0,elapsed:0,
+    points:[],targetPt:null,trajType:'',trajMeta:{},
+    responseTimer:null,elapsedI:null,pulseI:null,
+    // Base values for progressive ramp (custom-progressive only — survival
+    // has its own type-unlock progression handled inline).
+    baseRadius:60, baseResponse:2500,
+    progressive:false,
+    qs:null,
+
+    launch(){
+        Snd.init();
+        this.mode = UI.challenge === 'survival' ? 'survival' : 'normal';
+        this.lastMode=this.mode;
+        this.diff=UI.diff;
+        this.score=0;this.round=0;this.perfects=0;this.closes=0;this.misses=0;
+        this.streak=0;this.maxStreak=0;this.distances=[];this.elapsed=0;
+        this.paused=false;
+
+        if(this.mode==='survival'){
+            this.cfg={types:['linear'],pulses:4,radius:70,responseMs:3000,dotSize:16,rounds:Infinity};
+            this.maxRounds=Infinity;this.lives=3;this.maxLives=3;
+            this.progressive=false;   // survival uses its own type-unlock ramp
+        } else {
+            this.cfg={
+                types:[...UI.types],
+                pulses:UI.pulses,
+                radius:UI.radius,
+                responseMs:UI.response,
+                dotSize:14,
+                rounds:UI.rounds===0?Infinity:UI.rounds
+            };
+            this.maxRounds=UI.rounds===0?Infinity:UI.rounds;
+            this.lives=0;this.maxLives=0;
+            this.progressive=false;
+            this.baseRadius=UI.radius;
+            this.baseResponse=UI.response;
+        }
+        this.active=true;
+
+        document.getElementById('setup').classList.add('hide');
+        document.getElementById('res').classList.add('hide');
+        document.getElementById('hud').classList.add('on');
+        document.getElementById('tbar').classList.add('on');
+        document.getElementById('stwrap').classList.add('on');
+        document.getElementById('rinfo').classList.add('on');
+
+        document.getElementById('h-tm').textContent=this.maxRounds<Infinity?this.maxRounds:'∞';
+        document.getElementById('h-tdot').style.background=this.mode==='survival'?'var(--miss)':'var(--accent)';
+        BM.drawLives('#h-lives',this.lives,this.maxLives,'sm');BM.buildPips('#stbar',30);
+        this.updateHUD();
+
+        if(this.qs && this.qs.btn) this.qs.btn.classList.add('on');
+
+        this.elapsedI=this.scheduler.setInterval(()=>{
+            if(!this.active||this.paused)return;
+            this.elapsed=Math.floor(this.clock.now()/1000);
+            // Survival has its own type-unlock + ramp behavior (legacy)
+            if(this.mode==='survival'){
+                if(this.elapsed>20&&!this.cfg.types.includes('bounce'))this.cfg.types.push('bounce');
+                if(this.elapsed>40&&!this.cfg.types.includes('curve'))this.cfg.types.push('curve');
+                if(this.elapsed>60&&!this.cfg.types.includes('zigzag'))this.cfg.types.push('zigzag');
+                if(this.elapsed>80&&!this.cfg.types.includes('accel'))this.cfg.types.push('accel');
+                this.cfg.radius=Math.max(30,70-this.elapsed*0.4);
+                this.cfg.responseMs=Math.max(1500,3000-this.elapsed*15);
+                this.cfg.pulses=this.elapsed>50?3:4;
+            }
+            // Custom-progressive: tighten tolerance + response window, respect
+            // the user's choice of types and pulses
+            else if(this.mode==='custom' && this.progressive){
+                this.cfg.radius=Math.max(25, this.baseRadius - this.elapsed*0.4);
+                this.cfg.responseMs=Math.max(1200, this.baseResponse - this.elapsed*15);
+            }
+        },1000);
+
+        this.nextRound();
+    },
+
+    retry(){this.launch()},
+    toSetup(){
+        document.getElementById('res').classList.add('hide');
+        document.getElementById('setup').classList.remove('hide');
+        if(this.qs && this.qs.btn) this.qs.btn.classList.remove('on');
+    },
+
+    // ── Pause / Resume ──
+    // Two-phase game (OBSERVE → PREDICT). Pause halts whichever is active,
+    // wipes the arena, and on resume starts a fresh round. Anti-abuse:
+    // can't pause mid-observe to memorize the trajectory, nor mid-predict
+    // to think longer.
+    pause(){
+        if(!this.active || this.paused)return;
+        this.paused=true;
+        this.scheduler.clear(this.pulseI);
+        this.scheduler.clear(this.responseTimer);
+        this.scheduler.clear(this.elapsedI);
+        // Clean up predict-phase UI
+        document.getElementById('pred-zone').style.display='none';
+        document.getElementById('pred-zone').onclick=null;
+        document.getElementById('xhair').style.display='none';
+        document.body.style.cursor='crosshair';
+        document.getElementById('arena').innerHTML='';
+    },
+    resume(){
+        if(!this.active || !this.paused)return;
+        this.paused=false;
+        // Re-establish elapsed interval (same code as launch)
+        this.elapsedI=this.scheduler.setInterval(()=>{
+            if(!this.active||this.paused)return;
+            this.elapsed=Math.floor(this.clock.now()/1000);
+            if(this.mode==='survival'){
+                if(this.elapsed>20&&!this.cfg.types.includes('bounce'))this.cfg.types.push('bounce');
+                if(this.elapsed>40&&!this.cfg.types.includes('curve'))this.cfg.types.push('curve');
+                if(this.elapsed>60&&!this.cfg.types.includes('zigzag'))this.cfg.types.push('zigzag');
+                if(this.elapsed>80&&!this.cfg.types.includes('accel'))this.cfg.types.push('accel');
+                this.cfg.radius=Math.max(30,70-this.elapsed*0.4);
+                this.cfg.responseMs=Math.max(1500,3000-this.elapsed*15);
+                this.cfg.pulses=this.elapsed>50?3:4;
+            } else if(this.mode==='custom' && this.progressive){
+                this.cfg.radius=Math.max(25, this.baseRadius - this.elapsed*0.4);
+                this.cfg.responseMs=Math.max(1200, this.baseResponse - this.elapsed*15);
+            }
+        },1000);
+        // The current round was aborted; restart without incrementing.
+        // nextRound() will increment `round` so decrement first to keep
+        // the round counter accurate to the resumed-from value.
+        this.round--;
+        this.nextRound();
+    },
+    exit(){
+        this.active=false;this.paused=false;
+        this.scheduler.clear(this.pulseI);this.scheduler.clear(this.responseTimer);this.scheduler.clear(this.elapsedI);
+        document.body.style.cursor='crosshair';
+    },
+
+    nextRound(){
+        if(!this.active || this.paused)return;
+        this.round++;
+        if(this.round>this.maxRounds){this.end();return}
+        document.getElementById('h-round').textContent=this.maxRounds<Infinity?this.round+'/'+this.maxRounds:this.round;
+        document.getElementById('arena').innerHTML='';
+
+        this.trajType=this.cfg.types[Math.floor(Math.random()*this.cfg.types.length)];
+        this.trajMeta={curvature:(Math.random()>.5?1:-1)*(0.15+Math.random()*0.2),accelRate:0.15+Math.random()*0.15};
+
+        const pad=120;
+        const sx=pad+Math.random()*(innerWidth-pad*2);
+        const sy=pad+Math.random()*(innerHeight-pad*2);
+        const ang=Math.random()*Math.PI*2;
+        const spd=50+Math.random()*40;
+
+        this.points=[{x:sx,y:sy},{x:sx+Math.cos(ang)*spd,y:sy+Math.sin(ang)*spd}];
+
+        for(let i=2;i<this.cfg.pulses;i++){
+            const np=TRAJ[this.trajType](this.points,i,this.trajMeta);
+            np.x=Math.max(pad,Math.min(innerWidth-pad,np.x));
+            np.y=Math.max(100,Math.min(innerHeight-80,np.y));
+            this.points.push(np);
+        }
+
+        const tp=TRAJ[this.trajType](this.points,this.cfg.pulses,this.trajMeta);
+        tp.x=Math.max(pad,Math.min(innerWidth-pad,tp.x));
+        tp.y=Math.max(100,Math.min(innerHeight-80,tp.y));
+        this.targetPt=tp;
+
+        this.showPhase('OBSERVE');
+        this.playPulses();
+    },
+
+    showPhase(text){
+        const el=document.getElementById('phase-text');
+        el.textContent=text;el.classList.add('on');
+        this.scheduler.setTimeout(()=>el.classList.remove('on'),800);
+    },
+
+    playPulses(){
+        const arena=document.getElementById('arena');
+        let i=0;
+        // Stored on Game so pause() can clear it cleanly
+        this.pulseI=this.scheduler.setInterval(()=>{
+            if(!this.active || this.paused){this.scheduler.clear(this.pulseI);return}
+            const pt=this.points[i];
+            const dot=document.createElement('div');dot.className='pulse';
+            dot.style.width=this.cfg.dotSize+'px';dot.style.height=this.cfg.dotSize+'px';
+            dot.style.left=pt.x+'px';dot.style.top=pt.y+'px';
+            const alpha=.3+(i/(this.cfg.pulses-1))*.7;
+            dot.innerHTML=`<div class="pulse-core" style="background:rgba(168,85,247,${alpha});box-shadow:0 0 ${8+i*4}px rgba(168,85,247,${alpha*.6})"></div>`;
+            arena.appendChild(dot);
+            Snd.appear();
+
+            if(i>0){
+                const prev=this.points[i-1];
+                const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');
+                svg.classList.add('trail-line');svg.style.width='100%';svg.style.height='100%';
+                svg.style.position='fixed';svg.style.inset='0';
+                svg.innerHTML=`<line x1="${prev.x}" y1="${prev.y}" x2="${pt.x}" y2="${pt.y}" stroke="rgba(168,85,247,${alpha*.3})" stroke-width="1" stroke-dasharray="4,4"/>`;
+                arena.appendChild(svg);
+            }
+
+            i++;
+            if(i>=this.points.length){
+                this.scheduler.clear(this.pulseI);
+                this.scheduler.setTimeout(()=>this.enablePrediction(),400);
+            }
+        },450);
+    },
+
+    enablePrediction(){
+        if(!this.active || this.paused)return;
+        this.showPhase('PREDICT');
+        const zone=document.getElementById('pred-zone');
+        zone.style.display='block';
+        document.getElementById('xhair').style.display='block';
+        document.body.style.cursor='none';
+
+        const fill=document.getElementById('tbar-fill');
+        fill.style.transitionDuration='0s';fill.style.width='100%';fill.style.background='var(--accent)';
+        void fill.offsetWidth;
+        fill.style.transitionDuration=this.cfg.responseMs+'ms';fill.style.width='0%';
+        this.scheduler.setTimeout(()=>{if(fill.style.width!=='100%')fill.style.background='var(--warn)'},this.cfg.responseMs*.6);
+
+        zone.onclick=(e)=>{zone.onclick=null;this.submitPrediction(e.clientX,e.clientY)};
+
+        this.responseTimer=this.scheduler.setTimeout(()=>{
+            if(!this.active || this.paused)return;
+            zone.onclick=null;
+            this.submitPrediction(-1,-1);
+        },this.cfg.responseMs);
+    },
+
+    submitPrediction(cx,cy){
+        if(this.paused)return;
+        this.scheduler.clear(this.responseTimer);
+        document.getElementById('pred-zone').style.display='none';
+        document.getElementById('xhair').style.display='none';
+        document.body.style.cursor='crosshair';
+
+        const tx=this.targetPt.x,ty=this.targetPt.y;
+        const timedOut=cx===-1;
+        const dist=timedOut?Infinity:Math.sqrt((cx-tx)**2+(cy-ty)**2);
+
+        let quality,color,pts;
+        if(dist<=this.cfg.radius*.4){quality='PERFECT';color='var(--hit)';pts=300;this.perfects++}
+        else if(dist<=this.cfg.radius){quality='CLOSE';color='var(--close)';pts=150;this.closes++}
+        else{quality='MISS';color='var(--miss)';pts=0;this.misses++}
+
+        if(quality!=='MISS'){
+            this.streak++;if(this.streak>this.maxStreak)this.maxStreak=this.streak;
+            this.score+=pts+this.streak*5;
+            if(quality==='PERFECT') Snd.perfect(); else Snd.hit();
+        } else {
+            this.streak=0;Snd.miss();
+            if(this.mode==='survival'){
+                this.lives--;BM.drawLives('#h-lives',this.lives,this.maxLives,'sm');
+                if(this.lives<=0){this.showResult(tx,ty,cx,cy,dist,quality,color);this.scheduler.setTimeout(()=>this.end(),1200);return}
+            }
+        }
+
+        if(!timedOut)this.distances.push(dist);
+        BM.updatePips('#stbar',this.streak,'#stval');
+        this.updateHUD();
+        this.showResult(tx,ty,cx,cy,dist,quality,color);
+
+        this.scheduler.setTimeout(()=>{if(this.active)this.nextRound()},1400);
+    },
+
+    showResult(tx,ty,cx,cy,dist,quality,color){
+        const arena=document.getElementById('arena');
+
+        const actual=document.createElement('div');actual.className='marker marker-actual';
+        actual.style.width=this.cfg.radius*2+'px';actual.style.height=this.cfg.radius*2+'px';
+        actual.style.left=tx+'px';actual.style.top=ty+'px';
+        actual.style.background='rgba(0,255,136,.08)';
+        arena.appendChild(actual);
+
+        const adot=document.createElement('div');adot.className='marker';
+        adot.style.width='8px';adot.style.height='8px';adot.style.background='var(--hit)';
+        adot.style.left=tx+'px';adot.style.top=ty+'px';adot.style.boxShadow='0 0 12px var(--hit)';
+        arena.appendChild(adot);
+
+        if(cx!==-1){
+            const click=document.createElement('div');click.className='marker marker-click';
+            click.style.width='6px';click.style.height='6px';click.style.background='var(--accent)';
+            click.style.left=cx+'px';click.style.top=cy+'px';
+            arena.appendChild(click);
+
+            const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');
+            svg.classList.add('marker-line');svg.style.width='100%';svg.style.height='100%';
+            svg.style.position='fixed';svg.style.inset='0';
+            svg.innerHTML=`<line x1="${cx}" y1="${cy}" x2="${tx}" y2="${ty}" stroke="${color}" stroke-width="1" opacity=".5"/>`;
+            arena.appendChild(svg);
+        }
+
+        const fb=document.createElement('div');fb.className='fb-pop';
+        fb.textContent=quality+(dist<Infinity?' — '+Math.round(dist)+'px':'');
+        fb.style.color=color;
+        fb.style.left=tx+'px';fb.style.top=(ty-30)+'px';
+        arena.appendChild(fb);
+    },
+
+    updateHUD(){
+        document.getElementById('h-sc').textContent=this.score;
+        const total=this.perfects+this.closes+this.misses;
+        const hitRate=total>0?Math.round((this.perfects+this.closes)/total*100):100;
+        document.getElementById('h-ac').textContent=hitRate+'%';
+    },
+
+    end(){
+        this.active=false;this.paused=false;
+        this.scheduler.clear(this.elapsedI);this.scheduler.clear(this.pulseI);this.scheduler.clear(this.responseTimer);
+        document.getElementById('pred-zone').style.display='none';
+        document.getElementById('xhair').style.display='none';
+        document.body.style.cursor='crosshair';
+        document.getElementById('arena').innerHTML='';
+        document.getElementById('hud').classList.remove('on');
+        document.getElementById('tbar').classList.remove('on');
+        document.getElementById('stwrap').classList.remove('on');
+        document.getElementById('rinfo').classList.remove('on');
+        if(this.qs && this.qs.btn) this.qs.btn.classList.remove('on');
+
+        const avgDist=this.distances.length>0?Math.round(this.distances.reduce((a,b)=>a+b,0)/this.distances.length):0;
+        const total=this.perfects+this.closes+this.misses;
+        // Primary: prediction accuracy = landed inside tolerance (perfect+close)
+        const accuracy=total>0?Math.round((this.perfects+this.closes)/total*100):0;
+        const perfectPct=total>0?Math.round(this.perfects/total*100):0;
+
+        document.getElementById('r-mode').textContent =
+            (this.mode==='survival'?I18N.t('pp.survover'):I18N.t('m.complete'));
+        document.getElementById('r-primary').textContent=accuracy;
+        document.getElementById('r-perfectpct').textContent=perfectPct+'%';
+        document.getElementById('r-avgdist').textContent=avgDist+'px';
+
+        // ── Persist BEFORE comparison; bucket by difficulty (or survival) ──
+        const bucket = this.mode==='survival' ? 'surv' : (this.diff || 'custom');
+        const bestKey = 'acc_' + bucket;
+        const priorBest = Store.getBest(MODULE, bestKey);
+        const qualifies = total>=5;
+
+        Store.saveSession(MODULE,{
+            mode:this.mode, diff:this.diff, accuracy, perfectPct, avgDist,
+            perfects:this.perfects, closes:this.closes, misses:this.misses,
+            maxStreak:this.maxStreak, score:this.score
+        });
+        if(qualifies) Store.saveBest(MODULE, bestKey, accuracy, true);
+        Store.saveBest(MODULE, 'score', this.score, true);  // legacy
+
+        // ── Comparison line ──
+        const cmpEl=document.getElementById('r-compare');
+        const bucketLabel = this.mode==='survival' ? (I18N.lang==='es'?'supervivencia':'survival') : (this.diff ? I18N.t('m.'+this.diff).toLowerCase() : I18N.t('m.custom').replace('…','').toLowerCase());
+        if(total===0){
+            cmpEl.className='res-compare worse';
+            cmpEl.innerHTML='<span class="ar">—</span> ' + I18N.t('pp.nopred');
+        } else if(!qualifies){
+            cmpEl.className='res-compare worse';
+            cmpEl.innerHTML='<span class="ar">!</span> ' + I18N.t('pp.toofew');
+        } else if(priorBest===null||priorBest===undefined){
+            cmpEl.className='res-compare record';
+            cmpEl.innerHTML=`<span class="ar">★</span> ${I18N.lang==='es'?'Primera sesión '+bucketLabel+' — tu base':'First '+bucketLabel+' session — your baseline'}`;
+        } else {
+            const diff = accuracy - priorBest;
+            if(diff>0){
+                cmpEl.className='res-compare record';
+                cmpEl.innerHTML=`<span class="ar">▲</span> ${I18N.t('m.res.newbest')} · +${diff}% ${I18N.t('pp.over')}`;
+            } else if(diff===0){
+                cmpEl.className='res-compare better';
+                cmpEl.innerHTML=`<span class="ar">=</span> ${I18N.t('m.res.matched')} (${priorBest}%)`;
+            } else {
+                cmpEl.className='res-compare worse';
+                cmpEl.innerHTML=`<span class="ar">▾</span> ${Math.abs(diff)}% ${I18N.t('pp.below')} (${priorBest}%)`;
+            }
+        }
+
+        // ── Evolution (same bucket) ──
+        this.renderEvolution(bucket, accuracy);
+
+        // ── Details ──
+        document.getElementById('r-details').innerHTML =
+            `<span>${I18N.t('pp.d.perfect')} <b>${this.perfects}</b></span>` +
+            `<span>${I18N.t('pp.d.close')} <b>${this.closes}</b></span>` +
+            `<span>${I18N.t('pp.d.missed')} <b>${this.misses}</b></span>` +
+            `<span>${I18N.t('pp.d.beststreak')} <b>${this.maxStreak}</b></span>`;
+
+        document.getElementById('res').classList.remove('hide');
+    },
+
+    renderEvolution(bucket, currentAcc){
+        const bars=document.getElementById('r-evo-bars');
+        const bestSpan=document.getElementById('r-evo-best');
+        const all=Store.getSessions(MODULE)||[];
+        const sameKind=all.filter(s=>{
+            const b = s.mode==='survival' ? 'surv' : (s.diff || 'custom');
+            return b===bucket && typeof s.accuracy==='number';
+        }).slice(-12);
+        if(sameKind.length===0){
+            bars.innerHTML=`<div class="res-evo-empty">${I18N.t('pp.evoempty')}</div>`;
+            bestSpan.textContent='';
+            return;
+        }
+        const max=Math.max(...sameKind.map(s=>s.accuracy),currentAcc,1);
+        bestSpan.textContent=I18N.t('m.res.best')+' '+max+'%';
+        bars.innerHTML='';
+        sameKind.forEach((s,i)=>{
+            const bar=document.createElement('div');
+            bar.className='res-evo-bar'+(i===sameKind.length-1?' latest':'');
+            bar.style.height='0%';
+            bar.title=s.accuracy+'%';
+            bars.appendChild(bar);
+            const h=(s.accuracy/max)*100;
+            this.scheduler.requestAnimationFrame(()=>{ bar.style.height=Math.max(5,h)+'%'; });
+        });
+    }
+};
+
+window.addEventListener('mousemove',e=>{
+    document.getElementById('xhair').style.left=e.clientX+'px';
+    document.getElementById('xhair').style.top=e.clientY+'px';
+});
+if(!Snd.on) document.getElementById('snd-btn').textContent='♪ OFF';
+
+// Initialize difficulty preset (medium) — builds checkboxes, syncs sliders + summary
+UI.setDiff('medium', document.querySelector('#t-diff .pb.on'));
+UI.refreshSummary();
+
+// Re-render dynamic text on language change (static data-i18n auto-updates).
+// Also rebuild the trajectory checkboxes so their names/descriptions switch.
+window.addEventListener('langchange', () => {
+    UI.refreshSummary();
+    UI.setChallenge(UI.challenge, document.querySelector('#t-challenge .pb.on'));
+    UI.buildTrajChecks();
+});
+
+// Quick switcher — pause + module nav
+BM.attachTraining({module:MODULE,game:Game,ui:UI,start:'launch',finish:'end'});
+Game.qs = BM.mountQuickSwitcher({
+    current: MODULE,
+    onPause:  () => Game.pause(),
+    onResume: () => Game.resume(),
+    onExit:   () => Game.exit()
+});
+</script>
+</body>
+</html>

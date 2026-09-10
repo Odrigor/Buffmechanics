@@ -1,0 +1,708 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BuffMechanics | Stroop Test</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' fill='%23a855f7'/%3E%3Ctext x='50%25' y='54%25' text-anchor='middle' dominant-baseline='middle' font-family='monospace' font-size='40' font-weight='700' fill='%23ffffff'%3EB%3C/text%3E%3Crect x='2' y='2' width='60' height='60' fill='none' stroke='%23ffffff' stroke-width='3'/%3E%3C/svg%3E">
+    <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="../assets/shared.css">
+    <style>
+        :root{
+            --accent:#a855f7;
+            --accent-dim:rgba(168,85,247,.12);
+            --c-red:#ef4444;--c-blue:#3b82f6;--c-green:#22c55e;--c-yellow:#eab308;
+        }
+        body{height:100vh;overflow:hidden}
+
+        /* Timer bar under HUD */
+        .tbar{position:fixed;top:52px;left:0;right:0;height:2px;background:var(--bd);z-index:100;opacity:0;transition:opacity .3s}
+        .tbar.on{opacity:1}
+        .tbar-fill{height:100%;background:var(--accent);width:100%;transition:width .1s linear,background-color .3s}
+
+        /* Arena */
+        #arena{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:32px;z-index:10;padding:20px}
+
+        .word-wrap{display:flex;flex-direction:column;align-items:center;gap:16px;min-height:200px;justify-content:center}
+        .word-hint{font-family:'Space Mono',monospace;font-size:10px;color:var(--t2);letter-spacing:.2em;text-transform:uppercase}
+        .word{font-size:96px;font-weight:700;letter-spacing:-2px;line-height:1;transition:transform .1s;user-select:none;min-height:100px;display:flex;align-items:center}
+
+        /* Feedback ring */
+        .fb-ring{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);width:360px;height:360px;border-radius:50%;border:3px solid transparent;pointer-events:none;z-index:-1;transition:border-color .2s}
+
+        /* Options grid */
+        .options{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;width:100%;max-width:480px}
+        .opt{background:var(--sf);border:1px solid var(--bd);padding:18px;cursor:pointer;transition:all .15s;display:flex;align-items:center;justify-content:center;gap:10px;font-family:'Rajdhani',sans-serif;font-size:16px;font-weight:700;letter-spacing:.08em;color:var(--t1)}
+        .opt:hover{border-color:var(--t2);transform:translateY(-2px)}
+        .opt:active{transform:translateY(0)}
+        .opt-dot{width:10px;height:10px;border-radius:50%}
+        .opt-key{font-family:'Space Mono',monospace;font-size:10px;color:var(--t3);margin-left:4px;background:var(--bg);padding:2px 6px;border-radius:3px}
+
+        /* Setup rule card */
+        .rule-card{background:var(--sf);border:1px solid var(--bd);padding:14px 18px;max-width:480px;margin-top:4px}
+        .rule-title{font-family:'Space Mono',monospace;font-size:9px;color:var(--accent);letter-spacing:.14em;text-transform:uppercase;margin-bottom:6px}
+        .rule-text{font-size:13px;color:var(--t1);line-height:1.5}
+        .rule-text em{font-style:normal;color:var(--accent);font-weight:700}
+
+        @keyframes shake{0%,100%{transform:translateX(0)}20%{transform:translateX(-15px)}40%{transform:translateX(12px)}60%{transform:translateX(-6px)}80%{transform:translateX(3px)}}
+        .shake{animation:shake .3s ease}
+        @keyframes pop{0%{transform:scale(.85)}100%{transform:scale(1)}}
+        .pop{animation:pop .1s cubic-bezier(.34,1.56,.64,1)}
+
+        .rcard .rgrid:first-of-type{grid-template-columns:1fr 1fr 1fr}
+
+        /* ═══ Quick Start + Tune ═══ */
+        .qs-card{display:flex;flex-direction:column;align-items:center;max-width:440px;width:100%;margin:0 auto}
+        .qs-mode{width:100%;text-align:center;background:var(--sf);border:1px solid var(--bd);padding:18px 20px;margin-bottom:12px;transition:border-color .2s}
+        .qs-mode-label{font-family:'Space Mono',monospace;font-size:9px;letter-spacing:.18em;color:var(--t3);text-transform:uppercase;margin-bottom:6px}
+        .qs-mode-value{font-size:24px;font-weight:700;letter-spacing:.02em;color:var(--t1);line-height:1}
+        .qs-mode-sub{font-family:'Space Mono',monospace;font-size:10px;color:var(--t2);margin-top:6px;letter-spacing:.04em}
+        .tune-toggle{width:100%;display:flex;align-items:center;justify-content:center;gap:8px;background:none;border:1px solid var(--bd);color:var(--t2);font-family:'Space Mono',monospace;font-size:10px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;padding:10px;cursor:pointer;margin-bottom:12px;transition:all .2s}
+        .tune-toggle:hover{border-color:var(--t2);color:var(--t1)}
+        .tune-toggle .chev{transition:transform .3s;display:inline-block}
+        .tune-toggle.open .chev{transform:rotate(90deg)}
+        .tune-panel{width:100%;overflow:hidden;max-height:0;opacity:0;transition:max-height .35s cubic-bezier(.4,0,.2,1),opacity .25s,margin .35s;margin-bottom:0}
+        .tune-panel.open{max-height:1000px;opacity:1;margin-bottom:12px}
+        .tune-inner{background:var(--sf);border:1px solid var(--bd);padding:18px 18px 14px}
+        .tune-adv-divider{display:flex;align-items:center;gap:10px;margin:16px 0 12px;font-family:'Space Mono',monospace;font-size:8px;letter-spacing:.16em;color:var(--t3);text-transform:uppercase}
+        .tune-adv-divider::before,.tune-adv-divider::after{content:'';flex:1;height:1px;background:var(--bd)}
+
+        /* ═══ Redesigned results ═══ */
+        .res-metric{text-align:center;margin-bottom:6px}
+        .res-metric-value{font-size:56px;font-weight:700;color:var(--accent);line-height:1;letter-spacing:-1px}
+        .res-metric-unit{font-size:22px;color:var(--t2);font-weight:700;margin-left:4px}
+        .res-metric-label{font-family:'Space Mono',monospace;font-size:9px;letter-spacing:.16em;color:var(--t3);text-transform:uppercase;margin-top:6px}
+        .res-subduo{display:flex;justify-content:center;gap:28px;margin:10px 0 4px}
+        .res-subduo-item{text-align:center}
+        .res-subduo-v{font-size:22px;font-weight:700;line-height:1}
+        .res-subduo-l{font-family:'Space Mono',monospace;font-size:8px;letter-spacing:.14em;color:var(--t3);text-transform:uppercase;margin-top:4px}
+        .res-compare{text-align:center;font-family:'Space Mono',monospace;font-size:12px;letter-spacing:.04em;margin:14px 0;min-height:20px}
+        .res-compare.better{color:var(--hit)}
+        .res-compare.worse{color:var(--t2)}
+        .res-compare.record{color:var(--gold,#eab308)}
+        .res-compare .ar{font-weight:700;margin-right:4px}
+        .res-evo{margin:16px 0;padding:0 4px}
+        .res-evo-title{font-family:'Space Mono',monospace;font-size:8px;letter-spacing:.16em;color:var(--t3);text-transform:uppercase;margin-bottom:8px;display:flex;justify-content:space-between}
+        .res-evo-bars{display:flex;align-items:flex-end;gap:3px;height:50px}
+        .res-evo-bar{flex:1;background:var(--accent);opacity:.35;min-height:3px;border-radius:1px;transition:height .4s cubic-bezier(.4,0,.2,1),opacity .2s}
+        .res-evo-bar.latest{opacity:.95}
+        .res-evo-bar:hover{opacity:1}
+        .res-evo-empty{font-family:'Space Mono',monospace;font-size:9px;color:var(--t3);text-align:center;padding:14px 0;letter-spacing:.1em}
+        .res-details{display:flex;justify-content:center;gap:18px;flex-wrap:wrap;font-family:'Space Mono',monospace;font-size:10px;color:var(--t2);margin:14px 0;letter-spacing:.04em}
+        .res-details b{color:var(--t1);font-weight:700}
+    </style>
+<link rel="stylesheet" href="../assets/experience.css">
+<link rel="stylesheet" href="../assets/workspace.css">
+</head>
+<body>
+
+<div class="fb-ring" id="fb-ring"></div>
+
+<!-- HUD -->
+<div class="hud" id="hud">
+    <div class="hb"><span class="hl" data-i18n="stroop.score">Score</span><span class="hv" style="color:var(--accent)" id="h-sc">0</span></div>
+    <div class="hb c">
+        <div class="tpill"><div class="tdot" id="h-tdot"></div><span class="hv" id="h-tm" style="font-size:20px">60</span></div>
+        <div class="lives" id="h-lives" style="margin-top:4px"></div>
+    </div>
+    <div class="hb r"><span class="hl" data-i18n="stroop.accuracy">Accuracy</span><span class="hv" id="h-ac">100%</span></div>
+</div>
+<div class="tbar" id="tbar"><div class="tbar-fill" id="tbar-fill"></div></div>
+
+<!-- ARENA -->
+<div id="arena" style="display:none">
+    <div class="word-wrap">
+        <div class="word-hint" data-i18n="stroop.wordhint">IGNORE TEXT — CHOOSE THE COLOR</div>
+        <div class="word" id="word">—</div>
+    </div>
+    <div class="options" id="options"></div>
+</div>
+
+<div class="streak-wrap" id="stwrap">
+    <div class="spips" id="stbar"></div>
+    <span class="slbl" id="stval">×0</span>
+</div>
+
+<!-- SETUP -->
+<div class="setup" id="setup">
+    <button class="snd-toggle" id="snd-btn" onclick="Snd.toggle()">♪ ON</button>
+    <div class="setup-logo">STR</div>
+    <div class="stitle">STROOP <em>TEST</em></div>
+    <div class="ssub" data-i18n="stroop.sub">Cognitive interference — inhibitory control</div>
+
+    <div class="rule-card">
+        <div class="rule-title" data-i18n="stroop.rule">RULE</div>
+        <div class="rule-text" data-i18n-html="stroop.ruletext">Your brain reads words automatically. <em>Fight that instinct.</em> Select the <em>color of the ink</em>, not the word. Use mouse or keys <strong>Q W E R</strong>.</div>
+    </div>
+
+    <div class="qs-card">
+        <div class="qs-mode" id="qs-mode">
+            <div class="qs-mode-label" data-i18n="m.mode">Mode</div>
+            <div class="qs-mode-value" id="qs-mode-value">60 seconds</div>
+            <div class="qs-mode-sub" id="qs-mode-sub">Medium interference · 2.5s per word</div>
+        </div>
+
+        <button class="tune-toggle" id="tune-toggle" onclick="UI.toggleTune()">
+            <span class="chev">▸</span> <span data-i18n="m.tune">Tune</span>
+        </button>
+
+        <div class="tune-panel" id="tune-panel">
+            <div class="tune-inner">
+                <!-- Interference preset -->
+                <div class="pgroup"><div class="plabel" data-i18n="stroop.interflevel">Interference level</div>
+                    <div class="pbtn-row" id="t-diff">
+                        <button class="pb" onclick="UI.setDiff('easy',this)" data-i18n="m.easy">Easy</button>
+                        <button class="pb on" onclick="UI.setDiff('medium',this)" data-i18n="m.medium">Medium</button>
+                        <button class="pb" onclick="UI.setDiff('hard',this)" data-i18n="m.hard">Hard</button>
+                    </div>
+                    <div class="mono" style="font-size:9px;color:var(--t3);margin-top:6px;line-height:1.5">
+                        <span data-i18n="stroop.interfhint">Higher = more words whose color conflicts with their meaning, and less time to respond.</span>
+                    </div>
+                </div>
+
+                <!-- Duration — the total game time -->
+                <div class="pgroup"><div class="plabel" data-i18n="stroop.gameduration">Game duration</div>
+                    <div class="pbtn-row" id="t-time">
+                        <button class="pb" onclick="UI.setTime(30,this)">30s</button>
+                        <button class="pb on" onclick="UI.setTime(60,this)">60s</button>
+                        <button class="pb" onclick="UI.setTime(90,this)">90s</button>
+                        <button class="pb" onclick="UI.setTime(120,this)">120s</button>
+                        <button class="pb" onclick="UI.setTime(0,this)">∞</button>
+                    </div>
+                </div>
+
+                <!-- Response window — the per-word pace / delay -->
+                <div class="pgroup"><div class="plabel" data-i18n="stroop.timeperword">Time per word</div>
+                    <div class="slider-wrap">
+                        <span class="mono" style="font-size:9px;color:var(--t3)" data-i18n="m.fast">Fast</span>
+                        <input type="range" id="sl-win" min="1000" max="5000" value="2500" step="100" oninput="UI.updWin()">
+                        <span class="mono" style="font-size:9px;color:var(--t3)" data-i18n="m.relaxed">Relaxed</span>
+                        <span class="slider-val" id="sl-win-v">2.5s</span>
+                    </div>
+                    <div class="mono" style="font-size:9px;color:var(--t3);margin-top:6px;line-height:1.5">
+                        <span data-i18n="stroop.timehint">How long each word stays before it times out. Shorter = faster pace and more pressure.</span>
+                    </div>
+                </div>
+
+                <!-- ── Advanced ── -->
+                <div class="tune-adv-divider" data-i18n="m.advanced">Advanced</div>
+
+                <div class="pgroup"><div class="plabel" data-i18n="m.challenge">Challenge</div>
+                    <div class="pbtn-row" id="t-challenge">
+                        <button class="pb on" onclick="UI.setChallenge('normal',this)" data-i18n="m.normal">Normal</button>
+                        <button class="pb" onclick="UI.setChallenge('survival',this)" data-i18n="m.survival">Survival — 3 lives</button>
+                    </div>
+                    <div class="mono" style="font-size:9px;color:var(--t3);margin-top:6px;line-height:1.5" id="challenge-hint" data-i18n="stroop.hint.normal">
+                        Normal: respond at the set pace for the chosen duration.
+                    </div>
+                </div>
+
+                <div class="pgroup"><div class="plabel" data-i18n="stroop.conflictrate">Conflict rate</div>
+                    <div class="slider-wrap">
+                        <span class="mono" style="font-size:9px;color:var(--t3)" data-i18n="m.none">None</span>
+                        <input type="range" id="sl-conf" min="0" max="100" value="85" step="5" oninput="UI.updConf()">
+                        <span class="mono" style="font-size:9px;color:var(--t3)" data-i18n="m.full">Full</span>
+                        <span class="slider-val" id="sl-conf-v">85%</span>
+                    </div>
+                    <div class="mono" style="font-size:9px;color:var(--t3);margin-top:6px;line-height:1.5">
+                        <span data-i18n="stroop.conflicthint">Probability the word disagrees with its color. 0% = pure reading, 100% = maximum interference.</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <button class="gobtn" style="width:100%" onclick="Game.launch()" data-i18n="m.start">▶ START</button>
+        <button class="gobtn-back" onmouseenter="Snd.tick(660)" onclick="BM.backToHome()" data-i18n="m.back">← BACK TO MENU</button>
+    </div>
+
+    <div class="hint" data-i18n="stroop.hint">Focus on the color, not the word.</div>
+</div>
+
+<!-- RESULTS -->
+<div class="res hide" id="res">
+    <div class="rcard">
+        <div class="hl" id="r-mode" style="text-align:center;margin-bottom:10px">SESSION COMPLETE</div>
+
+        <!-- Primary metric: avg response time under interference -->
+        <div class="res-metric">
+            <span class="res-metric-value" id="r-primary">0</span><span class="res-metric-unit">ms</span>
+            <div class="res-metric-label" data-i18n="stroop.metric">Avg response under interference</div>
+        </div>
+
+        <!-- Components: accuracy gates the speed -->
+        <div class="res-subduo">
+            <div class="res-subduo-item">
+                <div class="res-subduo-v" style="color:var(--hit)" id="r-acc">0%</div>
+                <div class="res-subduo-l" data-i18n="stroop.accuracy">Accuracy</div>
+            </div>
+            <div class="res-subduo-item">
+                <div class="res-subduo-v" style="color:var(--warn)" id="r-best">0ms</div>
+                <div class="res-subduo-l" data-i18n="stroop.fastest">Fastest correct</div>
+            </div>
+        </div>
+
+        <!-- Comparison -->
+        <div class="res-compare" id="r-compare"></div>
+
+        <!-- Evolution -->
+        <div class="res-evo">
+            <div class="res-evo-title"><span data-i18n="m.recent">Recent sessions</span><span id="r-evo-best"></span></div>
+            <div class="res-evo-bars" id="r-evo-bars"></div>
+        </div>
+
+        <!-- Details -->
+        <div class="res-details" id="r-details"></div>
+
+        <div class="rbtns">
+            <button class="rb-s" onclick="location.href='../index.html'" data-i18n="m.exit">EXIT</button>
+            <button class="rb-s" onclick="Game.toSetup()" data-i18n="m.menu">MENU</button>
+            <button class="rb-p" onclick="Game.retry()" data-i18n="m.retry">RETRY</button>
+        </div>
+    </div>
+</div>
+
+<script src="../assets/i18n.js"></script>
+<script src="../assets/shared.js"></script>
+<script src="../assets/history.js"></script>
+<script src="../assets/training-core.js"></script>
+<script src="../assets/routine.js"></script>
+<script src="../assets/experience.js"></script>
+<script>
+const MODULE='stroop';
+
+const COLORS=[
+    {id:0,key:'Q',hex:'#ef4444',i18n:'stroop.color.red'},
+    {id:1,key:'W',hex:'#3b82f6',i18n:'stroop.color.blue'},
+    {id:2,key:'E',hex:'#22c55e',i18n:'stroop.color.green'},
+    {id:3,key:'R',hex:'#eab308',i18n:'stroop.color.yellow'}
+];
+// Resolve a color's display word in the current language.
+function colorName(col){ return I18N.t(col.i18n); }
+
+const PRESETS={
+    easy:{conflictRate:.7,windowMs:3500},
+    medium:{conflictRate:.85,windowMs:2500},
+    hard:{conflictRate:.95,windowMs:1800}
+};
+
+const UI={
+    diff:'medium', time:60,
+    conflict:85, window:2500,
+    challenge:'normal',
+    tuneOpen:false,
+
+    toggleTune(){
+        this.tuneOpen=!this.tuneOpen;
+        document.getElementById('tune-toggle').classList.toggle('open',this.tuneOpen);
+        document.getElementById('tune-panel').classList.toggle('open',this.tuneOpen);
+        Snd.tick(784);
+    },
+
+    // Interference preset sets conflict rate + window together, syncing sliders
+    setDiff(k,btn){
+        this.diff=k;BM.selectPb(btn);
+        const p=PRESETS[k];
+        this.conflict=Math.round(p.conflictRate*100);
+        this.window=p.windowMs;
+        document.getElementById('sl-conf').value=this.conflict;
+        document.getElementById('sl-conf-v').textContent=this.conflict+'%';
+        document.getElementById('sl-win').value=p.windowMs;
+        document.getElementById('sl-win-v').textContent=(p.windowMs/1000).toFixed(1)+'s';
+        this.refreshSummary();
+    },
+    setTime(v,btn){this.time=v;BM.selectPb(btn);this.refreshSummary()},
+
+    setChallenge(c,btn){
+        this.challenge=c;BM.selectPb(btn);
+        document.getElementById('challenge-hint').textContent = c==='survival'
+            ? I18N.t('stroop.hint.surv')
+            : I18N.t('stroop.hint.normal');
+        this.refreshSummary();
+    },
+
+    updConf(){
+        this.conflict=parseInt(document.getElementById('sl-conf').value);
+        document.getElementById('sl-conf-v').textContent=this.conflict+'%';
+        this.syncDiffHighlight();
+        this.refreshSummary();
+    },
+    updWin(){
+        this.window=parseInt(document.getElementById('sl-win').value);
+        document.getElementById('sl-win-v').textContent=(this.window/1000).toFixed(1)+'s';
+        this.syncDiffHighlight();
+        this.refreshSummary();
+    },
+
+    // If conflict+window match a preset exactly, highlight it; else clear
+    syncDiffHighlight(){
+        let matched='';
+        for(const [k,p] of Object.entries(PRESETS)){
+            if(Math.round(p.conflictRate*100)===this.conflict && p.windowMs===this.window){ matched=k; break; }
+        }
+        this.diff=matched;
+        document.querySelectorAll('#t-diff .pb').forEach(b=>{
+            const k=b.getAttribute('onclick').match(/'(\w+)'/)[1];
+            b.classList.toggle('on',k===matched);
+        });
+    },
+
+    refreshSummary(){
+        const diffLabel = (this.diff ? I18N.t('m.'+this.diff) : I18N.t('m.custom').replace('…','')) + ' ' + I18N.t('stroop.interference');
+        const winLabel = (this.window/1000).toFixed(1)+'s '+I18N.t('stroop.perword');
+        if(this.challenge==='survival'){
+            document.getElementById('qs-mode-value').textContent=I18N.t('m.survival').split(' —')[0];
+            document.getElementById('qs-mode-sub').textContent=`${diffLabel} · ${I18N.t('stroop.windowshrinks')} · ${I18N.t('stroop.lives3')}`;
+        } else {
+            document.getElementById('qs-mode-value').textContent =
+                this.time===0 ? I18N.t('m.endless') : this.time+(I18N.lang==='es'?' segundos':' seconds');
+            document.getElementById('qs-mode-sub').textContent=`${diffLabel} · ${winLabel}`;
+        }
+    }
+};
+
+function buildOptions(){
+    const c=document.getElementById('options');c.innerHTML='';
+    COLORS.forEach(col=>{
+        const b=document.createElement('button');b.className='opt';b.dataset.id=col.id;
+        b.innerHTML=`<span class="opt-dot" style="background:${col.hex}"></span><span>${colorName(col)}</span><span class="opt-key">${col.key}</span>`;
+        b.onclick=()=>Game.answer(col.id);
+        c.appendChild(b);
+    });
+}
+
+const Game={
+    active:false, paused:false, mode:'',lastMode:'',
+    colorId:0,textId:0,currentStart:0,windowMs:2500,conflictRate:.85,
+    score:0,correct:0,wrong:0,streak:0,maxStreak:0,
+    reactionTimes:[],timeLeft:0,
+    lives:0,maxLives:0,
+    wordTimer:null,windowTimer:null,timerI:null,
+    timed:true, progressive:false,
+    qs:null,
+
+    launch(){
+        Snd.init();
+        this.mode = UI.challenge === 'survival' ? 'survival' : 'normal';
+        this.lastMode=this.mode;
+        this.diff=UI.diff;
+        this.score=0;this.correct=0;this.wrong=0;this.streak=0;this.maxStreak=0;
+        this.reactionTimes=[];
+        this.paused=false;
+
+        if(this.mode==='survival'){
+            this.conflictRate=.9;this.windowMs=3000;
+            this.timeLeft=0;this.timed=false;
+            this.lives=3;this.maxLives=3;
+            this.progressive=true;
+        } else {
+            this.conflictRate=UI.conflict/100;
+            this.windowMs=UI.window;
+            this.timed=UI.time!==0;
+            this.timeLeft=this.timed?UI.time:0;
+            this.lives=0;this.maxLives=0;
+            this.progressive=false;
+        }
+        // Snapshot base for progressive ramp
+        this.baseWindow=this.windowMs;
+        this.active=true;
+
+        document.getElementById('setup').classList.add('hide');
+        document.getElementById('res').classList.add('hide');
+        document.getElementById('arena').style.display='flex';
+        document.getElementById('hud').classList.add('on');
+        document.getElementById('tbar').classList.add('on');
+        document.getElementById('stwrap').classList.add('on');
+
+        document.getElementById('h-tm').textContent=this.timed?this.timeLeft:'∞';
+        document.getElementById('h-tdot').style.background=this.mode==='survival'?'var(--miss)':'var(--accent)';
+        BM.drawLives('#h-lives',this.lives,this.maxLives,'sm');BM.buildPips('#stbar',30);
+        this.updateHUD();
+        if(this.qs && this.qs.btn) this.qs.btn.classList.add('on');
+        this.nextWord();
+        if(this.timed)this.startTimer();
+    },
+
+    retry(){this.launch()},
+    toSetup(){
+        document.getElementById('res').classList.add('hide');
+        document.getElementById('setup').classList.remove('hide');
+        if(this.qs && this.qs.btn) this.qs.btn.classList.remove('on');
+    },
+
+    // ── Pause / Resume — the qs overlay covers the arena visually, so we
+    //    only need to halt the timers. On resume nextWord() draws a fresh
+    //    prompt with a fresh response window. Same anti-abuse semantics
+    //    as time/apm: can't pause to skip a hard word. ──
+    pause(){
+        if(!this.active || this.paused)return;
+        this.paused=true;
+        this.scheduler.clear(this.windowTimer);
+        this.scheduler.clear(this.timerI);
+    },
+    resume(){
+        if(!this.active || !this.paused)return;
+        this.paused=false;
+        this.nextWord();
+        if(this.timed && this.timeLeft>0)this.startTimer();
+    },
+    exit(){
+        this.active=false;this.paused=false;
+        this.scheduler.clear(this.windowTimer);this.scheduler.clear(this.timerI);
+    },
+
+    nextWord(){
+        if(!this.active || this.paused)return;
+        this.scheduler.clear(this.windowTimer);
+
+        this.colorId=Math.floor(Math.random()*COLORS.length);
+
+        let textId;
+        if(Math.random()<this.conflictRate){
+            do{textId=Math.floor(Math.random()*COLORS.length)}while(textId===this.colorId);
+        }else{
+            textId=this.colorId;
+        }
+        this.textId=textId;
+
+        const word=document.getElementById('word');
+        word.textContent=colorName(COLORS[textId]);
+        word.style.color=COLORS[this.colorId].hex;
+        word.classList.remove('pop');void word.offsetWidth;word.classList.add('pop');
+
+        const fill=document.getElementById('tbar-fill');
+        fill.style.transitionDuration='0s';
+        fill.style.width='100%';
+        fill.style.background='var(--accent)';
+        void fill.offsetWidth;
+        fill.style.transitionDuration=this.windowMs+'ms';
+        fill.style.width='0%';
+
+        this.scheduler.setTimeout(()=>{if(fill)fill.style.background='var(--warn)'},this.windowMs*.6);
+        this.scheduler.setTimeout(()=>{if(fill)fill.style.background='var(--miss)'},this.windowMs*.85);
+
+        this.currentStart=this.clock.now();
+
+        this.windowTimer=this.scheduler.setTimeout(()=>{
+            if(!this.active)return;
+            this.registerWrong(true);
+        },this.windowMs);
+    },
+
+    answer(selectedId){
+        if(!this.active || this.paused)return;
+        this.scheduler.clear(this.windowTimer);
+
+        const rt=this.clock.now()-this.currentStart;
+        const ring=document.getElementById('fb-ring');
+        const word=document.getElementById('word');
+
+        if(selectedId===this.colorId){
+            this.reactionTimes.push(rt);
+            this.correct++;this.streak++;
+            if(this.streak>this.maxStreak)this.maxStreak=this.streak;
+
+            const speedBonus=Math.max(0,Math.round((this.windowMs-rt)/10));
+            this.score+=100+speedBonus+this.streak*3;
+
+            Snd.hit();
+            ring.style.borderColor='var(--hit)';
+            this.scheduler.setTimeout(()=>ring.style.borderColor='transparent',200);
+
+            // Window-shrink progression: same formula for survival and
+            // custom-progressive, gated by this.progressive flag.
+            if(this.progressive && this.correct%5===0){
+                this.windowMs=Math.max(900,this.windowMs-50);
+            }
+            // Life recovery only applies in survival
+            if(this.mode==='survival'&&this.correct%25===0&&this.lives<this.maxLives){
+                this.lives++;BM.drawLives('#h-lives',this.lives,this.maxLives,'sm');
+            }
+
+            BM.updatePips('#stbar',this.streak,'#stval');
+            this.updateHUD();
+            this.nextWord();
+        }else{
+            this.registerWrong(false);
+        }
+    },
+
+    registerWrong(timedOut){
+        if(this.paused)return;
+        this.wrong++;this.streak=0;
+        Snd.miss();
+        const ring=document.getElementById('fb-ring');
+        const word=document.getElementById('word');
+        ring.style.borderColor='var(--miss)';
+        word.classList.add('shake');
+        this.scheduler.setTimeout(()=>{ring.style.borderColor='transparent';word.classList.remove('shake')},300);
+
+        if(this.mode==='survival'){
+            this.lives--;BM.drawLives('#h-lives',this.lives,this.maxLives,'sm');
+            if(this.lives<=0){this.end();return}
+        }else if(this.timed&&!BM.session?.config.settings.fixedDuration){
+            this.timePenalty=(this.timePenalty||0)+1;this.timeLeft=Math.max(0,this.timeLeft-1);
+        }
+
+        BM.updatePips('#stbar',0,'#stval');
+        this.updateHUD();
+        this.nextWord();
+    },
+
+    updateHUD(){
+        document.getElementById('h-sc').textContent=this.score;
+        const total=this.correct+this.wrong;
+        const acc=total>0?Math.round(this.correct/total*100):0;
+        document.getElementById('h-ac').textContent=acc+'%';
+        if(this.timed)document.getElementById('h-tm').textContent=this.timeLeft;
+    },
+
+    startTimer(){this.timerI=this.scheduler.setInterval(()=>{this.timeLeft=Math.max(0,Math.ceil(this.sessionDuration-this.clock.now()/1000-(this.timePenalty||0)));this.updateHUD();if(this.timeLeft<=0)this.end()},1000)},
+
+    end(){
+        this.active=false;this.paused=false;
+        this.scheduler.clear(this.timerI);this.scheduler.clear(this.windowTimer);
+        document.getElementById('arena').style.display='none';
+        document.getElementById('hud').classList.remove('on');
+        document.getElementById('tbar').classList.remove('on');
+        document.getElementById('stwrap').classList.remove('on');
+        if(this.qs && this.qs.btn) this.qs.btn.classList.remove('on');
+
+        const total=this.correct+this.wrong;
+        const acc=total>0?Math.round(this.correct/total*100):0;
+        const avgRt=this.reactionTimes.length>0?Math.round(this.reactionTimes.reduce((a,b)=>a+b,0)/this.reactionTimes.length):0;
+        const bestRt=this.reactionTimes.length>0?Math.round(Math.min(...this.reactionTimes)):0;
+
+        document.getElementById('r-mode').textContent =
+            (this.mode==='survival'?I18N.t('stroop.survover'):I18N.t('m.complete'));
+        // Primary metric: avg response time under interference (lower = better control)
+        document.getElementById('r-primary').textContent=avgRt;
+        document.getElementById('r-acc').textContent=acc+'%';
+        document.getElementById('r-best').textContent=bestRt+'ms';
+
+        // ── Persist BEFORE comparison; bucket by interference level (or survival).
+        //    RT is only meaningful when accuracy is decent — we record RT but
+        //    only count it toward "best" if accuracy ≥ 80% (no speed-spamming). ──
+        const bucket = this.mode==='survival' ? 'surv' : (this.diff || 'custom');
+        const bestKey = 'rt_' + bucket;
+        const priorBest = Store.getBest(MODULE, bestKey);  // lower is better
+        const qualifies = acc>=80 && this.correct>=5;
+
+        Store.saveSession(MODULE,{
+            mode:this.mode, diff:this.diff, avgRt, acc,
+            correct:this.correct, bestRt, maxStreak:this.maxStreak, score:this.score
+        });
+        if(qualifies && avgRt>0) Store.saveBest(MODULE, bestKey, avgRt, false);  // lower better
+        Store.saveBest(MODULE, 'score', this.score, true);  // legacy
+
+        // ── Comparison line ──
+        const cmpEl=document.getElementById('r-compare');
+        const bucketLabel = this.mode==='survival' ? (I18N.lang==='es'?'supervivencia':'survival') : (this.diff ? I18N.t('m.'+this.diff).toLowerCase() : I18N.t('m.custom').replace('…','').toLowerCase())+' '+I18N.t('stroop.interference');
+        if(total===0){
+            cmpEl.className='res-compare worse';
+            cmpEl.innerHTML='<span class="ar">—</span> ' + I18N.t('stroop.noresp');
+        } else if(!qualifies){
+            cmpEl.className='res-compare worse';
+            cmpEl.innerHTML=`<span class="ar">!</span> ${I18N.t('stroop.acclow')}`;
+        } else if(priorBest===null||priorBest===undefined||priorBest===0){
+            cmpEl.className='res-compare record';
+            cmpEl.innerHTML=`<span class="ar">★</span> ${I18N.lang==='es'?'Primera sesión '+bucketLabel+' — tu base':'First '+bucketLabel+' session — your baseline'}`;
+        } else {
+            const diff = avgRt - priorBest;  // negative = faster = better
+            if(diff<0){
+                cmpEl.className='res-compare record';
+                cmpEl.innerHTML=`<span class="ar">▲</span> ${I18N.t('m.res.newbest')} · ${Math.abs(diff)}ms ${I18N.t('stroop.faster')}`;
+            } else if(diff===0){
+                cmpEl.className='res-compare better';
+                cmpEl.innerHTML=`<span class="ar">=</span> ${I18N.t('m.res.matched')} (${priorBest}ms)`;
+            } else {
+                cmpEl.className='res-compare worse';
+                cmpEl.innerHTML=`<span class="ar">▾</span> ${diff}ms ${I18N.t('stroop.slower')} (${priorBest}ms)`;
+            }
+        }
+
+        // ── Evolution (same bucket, only accuracy-qualified sessions) ──
+        this.renderEvolution(bucket, avgRt, qualifies);
+
+        // ── Details ──
+        document.getElementById('r-details').innerHTML =
+            `<span>${I18N.t('stroop.d.correct')} <b>${this.correct}</b>/${total}</span>` +
+            `<span>${I18N.t('stroop.d.beststreak')} <b>${this.maxStreak}</b></span>` +
+            `<span>${I18N.t('stroop.d.score')} <b>${this.score}</b></span>`;
+
+        document.getElementById('res').classList.remove('hide');
+    },
+
+    renderEvolution(bucket, currentRt, currentQualifies){
+        const bars=document.getElementById('r-evo-bars');
+        const bestSpan=document.getElementById('r-evo-best');
+        const all=Store.getSessions(MODULE)||[];
+        // Only show sessions where accuracy was decent — RT under low accuracy
+        // is not a real measure of inhibitory control.
+        const sameKind=all.filter(s=>{
+            const b = s.mode==='survival' ? 'surv' : (s.diff || 'custom');
+            return b===bucket && typeof s.avgRt==='number' && s.avgRt>0 && s.acc>=80;
+        }).slice(-12);
+        if(sameKind.length===0){
+            bars.innerHTML=`<div class="res-evo-empty">${I18N.t('stroop.evoempty')}</div>`;
+            bestSpan.textContent='';
+            return;
+        }
+        // Lower RT is better → invert the bar height (faster = taller)
+        const maxRt=Math.max(...sameKind.map(s=>s.avgRt),currentRt||0,1);
+        const minRt=Math.min(...sameKind.map(s=>s.avgRt));
+        bestSpan.textContent=I18N.t('m.res.best')+' '+minRt+'ms';
+        bars.innerHTML='';
+        sameKind.forEach((s,i)=>{
+            const bar=document.createElement('div');
+            bar.className='res-evo-bar'+(i===sameKind.length-1?' latest':'');
+            bar.style.height='0%';
+            bar.title=s.avgRt+'ms · '+s.acc+'%';
+            bars.appendChild(bar);
+            const h=(1 - (s.avgRt - minRt)/(maxRt - minRt || 1)) * 80 + 20;
+            this.scheduler.requestAnimationFrame(()=>{ bar.style.height=h+'%'; });
+        });
+    }
+};
+
+window.addEventListener('keydown',e=>{
+    if(!Game.active||e.repeat)return;
+    // Block game keys when quick switcher is open
+    if(Game.qs && Game.qs.isOpen) return;
+    const k=e.key.toLowerCase();
+    if(k==='q')Game.answer(0);
+    else if(k==='w')Game.answer(1);
+    else if(k==='e')Game.answer(2);
+    else if(k==='r')Game.answer(3);
+});
+
+buildOptions();
+if(!Snd.on) document.getElementById('snd-btn').textContent='♪ OFF';
+
+// Initialize interference preset (medium) — also syncs both sliders + summary
+UI.setDiff('medium', document.querySelector('#t-diff .pb.on'));
+UI.refreshSummary();
+
+// Re-render dynamic text on language change. Critical for Stroop: the color
+// words (the stimulus + the answer buttons) must switch language live, so we
+// rebuild the options and re-render the current word if a round is in play.
+window.addEventListener('langchange', () => {
+    UI.refreshSummary();
+    UI.setChallenge(UI.challenge, document.querySelector('#t-challenge .pb.on'));
+    buildOptions();
+    if(Game.active && !Game.paused){
+        const word=document.getElementById('word');
+        if(word) word.textContent=colorName(COLORS[Game.textId]);
+    }
+});
+
+// Quick switcher — pause + module nav
+BM.attachTraining({module:MODULE,game:Game,ui:UI,start:'launch',finish:'end'});
+Game.qs = BM.mountQuickSwitcher({
+    current: MODULE,
+    onPause:  () => Game.pause(),
+    onResume: () => Game.resume(),
+    onExit:   () => Game.exit()
+});
+</script>
+</body>
+</html>

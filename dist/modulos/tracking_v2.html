@@ -1,0 +1,708 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BuffMechanics | Smooth Tracking</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' fill='%23f97316'/%3E%3Ctext x='50%25' y='54%25' text-anchor='middle' dominant-baseline='middle' font-family='monospace' font-size='40' font-weight='700' fill='%23ffffff'%3EB%3C/text%3E%3Crect x='2' y='2' width='60' height='60' fill='none' stroke='%23ffffff' stroke-width='3'/%3E%3C/svg%3E">
+    <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="../assets/shared.css">
+    <style>
+        :root{
+            --accent:#f97316;
+            --accent-dim:rgba(249,115,22,.12);
+            --hit-dim:rgba(34,197,94,.15);
+        }
+        body{overflow:hidden;height:100vh}
+
+        /* Module-specific crosshair color (orange) */
+        #xhair::before,#xhair::after{background:rgba(249,115,22,.8) !important}
+
+        /* Arena grid */
+        #arena{position:fixed;inset:0;z-index:0;
+            background-image:linear-gradient(rgba(255,255,255,.02) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.02) 1px,transparent 1px);
+            background-size:60px 60px}
+
+        /* Target */
+        #tgt{position:absolute;border-radius:50%;border:2px solid var(--accent);transform:translate(-50%,-50%);z-index:10;display:none;transition:border-color .15s,box-shadow .15s}
+        #tgt .core{width:30%;height:30%;border-radius:50%;background:var(--accent);box-shadow:0 0 10px var(--accent);position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);transition:all .15s}
+        #tgt.on{border-color:#22c55e;box-shadow:0 0 25px rgba(34,197,94,.4)}
+        #tgt.on .core{background:#22c55e;box-shadow:0 0 14px #22c55e}
+
+        /* Beam */
+        #beam{position:absolute;top:0;left:0;width:1px;height:2px;transform-origin:0 50%;opacity:0;pointer-events:none;z-index:5;border-radius:1px}
+
+        /* Status indicator */
+        .status{position:fixed;top:58px;left:50%;transform:translateX(-50%);z-index:100;pointer-events:none;opacity:0;transition:opacity .3s}
+        .status.on{opacity:1}
+        .status-pill{padding:3px 14px;border-radius:12px;font-family:'Space Mono',monospace;font-size:9px;font-weight:700;letter-spacing:.1em;border:1px solid var(--bd);background:var(--sf);transition:all .15s}
+        .status-pill.locked{border-color:var(--hit);color:var(--hit);background:var(--hit-dim)}
+
+        /* Efficiency ring bottom */
+        .eff-wrap{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);z-index:100;pointer-events:none;opacity:0;transition:opacity .3s;display:flex;align-items:center;gap:12px}
+        .eff-wrap.on{opacity:1}
+        .eff-bar{width:200px;height:4px;background:var(--bd);border-radius:2px;overflow:hidden}
+        .eff-fill{height:100%;background:var(--accent);width:0%;transition:width .3s}
+        .eff-fill.good{background:var(--hit)}
+        .eff-val{font-family:'Space Mono',monospace;font-size:12px;font-weight:700;min-width:48px}
+
+        /* Results ring */
+        .ring-wrap{width:140px;height:140px;margin:0 auto 8px;position:relative}
+        .ring-wrap svg{width:100%;height:100%;transform:rotate(-90deg)}
+        .ring-bg{fill:none;stroke:var(--bd);stroke-width:6}
+        .ring-fg{fill:none;stroke:var(--accent);stroke-width:6;stroke-linecap:round;stroke-dasharray:408;stroke-dashoffset:408;transition:stroke-dashoffset 1s ease}
+
+        /* ═══ Quick Start + Tune ═══ */
+        .qs-card{display:flex;flex-direction:column;align-items:center;max-width:440px;width:100%;margin:0 auto}
+        .qs-mode{width:100%;text-align:center;background:var(--sf);border:1px solid var(--bd);padding:18px 20px;margin-bottom:12px;transition:border-color .2s}
+        .qs-mode-label{font-family:'Space Mono',monospace;font-size:9px;letter-spacing:.18em;color:var(--t3);text-transform:uppercase;margin-bottom:6px}
+        .qs-mode-value{font-size:24px;font-weight:700;letter-spacing:.02em;color:var(--t1);line-height:1}
+        .qs-mode-sub{font-family:'Space Mono',monospace;font-size:10px;color:var(--t2);margin-top:6px;letter-spacing:.04em}
+        .tune-toggle{width:100%;display:flex;align-items:center;justify-content:center;gap:8px;background:none;border:1px solid var(--bd);color:var(--t2);font-family:'Space Mono',monospace;font-size:10px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;padding:10px;cursor:pointer;margin-bottom:12px;transition:all .2s}
+        .tune-toggle:hover{border-color:var(--t2);color:var(--t1)}
+        .tune-toggle .chev{transition:transform .3s;display:inline-block}
+        .tune-toggle.open .chev{transform:rotate(90deg)}
+        .tune-panel{width:100%;overflow:hidden;max-height:0;opacity:0;transition:max-height .35s cubic-bezier(.4,0,.2,1),opacity .25s,margin .35s;margin-bottom:0}
+        .tune-panel.open{max-height:1000px;opacity:1;margin-bottom:12px}
+        .tune-inner{background:var(--sf);border:1px solid var(--bd);padding:18px 18px 14px}
+        .tune-adv-divider{display:flex;align-items:center;gap:10px;margin:16px 0 12px;font-family:'Space Mono',monospace;font-size:8px;letter-spacing:.16em;color:var(--t3);text-transform:uppercase}
+        .tune-adv-divider::before,.tune-adv-divider::after{content:'';flex:1;height:1px;background:var(--bd)}
+
+        /* ═══ Results extension ═══ */
+        .res-compare{text-align:center;font-family:'Space Mono',monospace;font-size:12px;letter-spacing:.04em;margin:14px 0;min-height:20px}
+        .res-compare.better{color:var(--hit)}
+        .res-compare.worse{color:var(--t2)}
+        .res-compare.record{color:var(--gold,#eab308)}
+        .res-compare .ar{font-weight:700;margin-right:4px}
+        .res-evo{margin:16px 0;padding:0 4px}
+        .res-evo-title{font-family:'Space Mono',monospace;font-size:8px;letter-spacing:.16em;color:var(--t3);text-transform:uppercase;margin-bottom:8px;display:flex;justify-content:space-between}
+        .res-evo-bars{display:flex;align-items:flex-end;gap:3px;height:50px}
+        .res-evo-bar{flex:1;background:var(--accent);opacity:.35;min-height:3px;border-radius:1px;transition:height .4s cubic-bezier(.4,0,.2,1),opacity .2s}
+        .res-evo-bar.latest{opacity:.95}
+        .res-evo-bar:hover{opacity:1}
+        .res-evo-empty{font-family:'Space Mono',monospace;font-size:9px;color:var(--t3);text-align:center;padding:14px 0;letter-spacing:.1em}
+    </style>
+<link rel="stylesheet" href="../assets/experience.css">
+<link rel="stylesheet" href="../assets/workspace.css">
+</head>
+<body>
+<div id="xhair" class="xhair"><div class="xhair-dot"></div></div>
+
+<div id="arena">
+    <div id="beam"></div>
+    <div id="tgt"><div class="core"></div></div>
+</div>
+
+<!-- HUD -->
+<div class="hud" id="hud">
+    <div class="hb"><span class="hl" data-i18n="trk.efficiency">Efficiency</span><span class="hv" id="h-eff" style="color:var(--accent)">0%</span></div>
+    <div class="hb c">
+        <div class="tpill"><div class="tdot" id="h-tdot"></div><span class="hv" id="h-tm" style="font-size:20px">45</span></div>
+        <div class="lives" id="h-lives"></div>
+    </div>
+    <div class="hb r"><span class="hl" data-i18n="trk.tot">Time on Target</span><span class="hv" id="h-tot">0.0s</span></div>
+</div>
+<div class="status" id="status"><div class="status-pill" id="status-pill">SEARCHING</div></div>
+<div class="eff-wrap" id="eff-wrap">
+    <div class="eff-bar"><div class="eff-fill" id="eff-fill"></div></div>
+    <span class="eff-val" id="eff-val" style="color:var(--accent)">0%</span>
+</div>
+
+<!-- SETUP -->
+<div class="setup" id="setup">
+    <button class="snd-toggle" id="snd-btn" onclick="TrackSnd.toggle()">♪ ON</button>
+    <div class="setup-logo">TRK</div>
+    <div class="stitle">SMOOTH <em>TRACKING</em></div>
+    <div class="ssub" data-i18n="trk.sub">Sustained target acquisition</div>
+
+    <div class="qs-card">
+        <div class="qs-mode" id="qs-mode">
+            <div class="qs-mode-label" data-i18n="m.mode">Mode</div>
+            <div class="qs-mode-value" id="qs-mode-value">45 seconds</div>
+            <div class="qs-mode-sub" id="qs-mode-sub">Medium · keep your cursor locked on the target</div>
+        </div>
+
+        <button class="tune-toggle" id="tune-toggle" onclick="UI.toggleTune()">
+            <span class="chev">▸</span> <span data-i18n="m.tune">Tune</span>
+        </button>
+
+        <div class="tune-panel" id="tune-panel">
+            <div class="tune-inner">
+                <!-- Difficulty preset -->
+                <div class="pgroup"><div class="plabel" data-i18n="m.difficulty">Difficulty</div>
+                    <div class="pbtn-row" id="t-diff">
+                        <button class="pb" onclick="UI.setDiff('easy',this)" data-i18n="m.easy">Easy</button>
+                        <button class="pb on" onclick="UI.setDiff('medium',this)" data-i18n="m.medium">Medium</button>
+                        <button class="pb" onclick="UI.setDiff('hard',this)" data-i18n="m.hard">Hard</button>
+                    </div>
+                </div>
+
+                <!-- Duration -->
+                <div class="pgroup"><div class="plabel" data-i18n="m.duration">Duration</div>
+                    <div class="pbtn-row" id="t-time">
+                        <button class="pb" onclick="UI.setTime(30,this)">30s</button>
+                        <button class="pb on" onclick="UI.setTime(45,this)">45s</button>
+                        <button class="pb" onclick="UI.setTime(60,this)">60s</button>
+                        <button class="pb" onclick="UI.setTime(90,this)">90s</button>
+                        <button class="pb" onclick="UI.setTime(0,this)">∞</button>
+                    </div>
+                </div>
+
+                <!-- ── Advanced ── -->
+                <div class="tune-adv-divider" data-i18n="m.advanced">Advanced</div>
+
+                <div class="pgroup"><div class="plabel" data-i18n="m.challenge">Challenge</div>
+                    <div class="pbtn-row" id="t-challenge">
+                        <button class="pb on" onclick="UI.setChallenge('normal',this)" data-i18n="m.normal">Normal</button>
+                        <button class="pb" onclick="UI.setChallenge('survival',this)" data-i18n="m.survival">Survival — 3 lives</button>
+                    </div>
+                    <div class="mono" style="font-size:9px;color:var(--t3);margin-top:6px;line-height:1.5" id="challenge-hint" data-i18n="trk.hint.normal">
+                        Normal: track for the set duration.
+                    </div>
+                </div>
+
+                <div class="pgroup"><div class="plabel" data-i18n="trk.targetspeed">Target speed</div>
+                    <div class="slider-wrap">
+                        <span class="mono" style="font-size:9px;color:var(--t3)" data-i18n="m.slow">Slow</span>
+                        <input type="range" id="sl-speed" min="1" max="8" value="3.5" step="0.5" oninput="UI.updSlider('speed')">
+                        <span class="mono" style="font-size:9px;color:var(--t3)" data-i18n="m.fast">Fast</span>
+                        <span class="slider-val" id="sl-speed-v">3.5</span>
+                    </div>
+                </div>
+                <div class="pgroup"><div class="plabel" data-i18n="trk.targetsize">Target size</div>
+                    <div class="slider-wrap">
+                        <span class="mono" style="font-size:9px;color:var(--t3)" data-i18n="m.small">Small</span>
+                        <input type="range" id="sl-size" min="20" max="80" value="45" oninput="UI.updSlider('size')">
+                        <span class="mono" style="font-size:9px;color:var(--t3)" data-i18n="m.big">Big</span>
+                        <span class="slider-val" id="sl-size-v">45px</span>
+                    </div>
+                </div>
+                <div class="pgroup"><div class="plabel" data-i18n="trk.chaos">Chaos (direction change frequency)</div>
+                    <div class="slider-wrap">
+                        <span class="mono" style="font-size:9px;color:var(--t3)" data-i18n="m.low">Low</span>
+                        <input type="range" id="sl-chaos" min="1" max="10" value="4" oninput="UI.updSlider('chaos')">
+                        <span class="mono" style="font-size:9px;color:var(--t3)" data-i18n="m.high">High</span>
+                        <span class="slider-val" id="sl-chaos-v">4</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <button class="gobtn" style="width:100%" onclick="Game.launch()" data-i18n="m.start">▶ START</button>
+        <button class="gobtn-back" onmouseenter="Snd.tick(660)" onclick="BM.backToHome()" data-i18n="m.back">← BACK TO MENU</button>
+    </div>
+
+    <div class="hint" data-i18n="trk.hint">Keep your cursor locked on the moving target.</div>
+</div>
+
+<!-- RESULTS -->
+<div class="res hide" id="res">
+    <div class="rcard">
+        <div style="text-align:center">
+            <div class="hl" style="margin-bottom:8px" id="r-mode">SESSION COMPLETE</div>
+            <div class="ring-wrap">
+                <svg viewBox="0 0 140 140">
+                    <circle class="ring-bg" cx="70" cy="70" r="65"/>
+                    <circle class="ring-fg" id="r-ring" cx="70" cy="70" r="65"/>
+                </svg>
+                <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center">
+                    <div style="font-size:36px;font-weight:700" id="r-eff">0%</div>
+                    <div class="hl" data-i18n="trk.efficiency">Efficiency</div>
+                </div>
+            </div>
+            <div id="r-new-best"></div>
+        </div>
+
+        <!-- Comparison to best -->
+        <div class="res-compare" id="r-compare"></div>
+
+        <!-- Evolution -->
+        <div class="res-evo">
+            <div class="res-evo-title"><span data-i18n="m.recent">Recent sessions</span><span id="r-evo-best"></span></div>
+            <div class="res-evo-bars" id="r-evo-bars"></div>
+        </div>
+
+        <div class="rgrid">
+            <div class="rcell"><div class="rv" style="color:var(--hit)" id="r-tot">0s</div><div class="rl" data-i18n="trk.tot">Time on target</div></div>
+            <div class="rcell"><div class="rv" id="r-dur">0s</div><div class="rl" data-i18n="trk.totalduration">Total duration</div></div>
+            <div class="rcell"><div class="rv" style="color:var(--warn)" id="r-spd">0</div><div class="rl" data-i18n="trk.maxspeed">Max speed</div></div>
+            <div class="rcell"><div class="rv" id="r-avg">0%</div><div class="rl" data-i18n="trk.avglock">Avg lock %</div></div>
+        </div>
+        <div class="rbtns">
+            <button class="rb-s" onclick="location.href='../index.html'" data-i18n="m.exit">EXIT</button>
+            <button class="rb-s" onclick="Game.toSetup()" data-i18n="m.menu">MENU</button>
+            <button class="rb-p" onclick="Game.retry()" data-i18n="m.retry">RETRY</button>
+        </div>
+    </div>
+</div>
+
+<script src="../assets/i18n.js"></script>
+<script src="../assets/shared.js"></script>
+<script src="../assets/history.js"></script>
+<script src="../assets/training-core.js"></script>
+<script src="../assets/routine.js"></script>
+<script src="../assets/experience.js"></script>
+<script>
+const MODULE='tracking';
+
+// Module-specific: continuous drone sound (not compatible with shared Snd one-shots).
+// On/off state lives on global Snd so it persists in localStorage and stays
+// in sync with other modules and the home settings overlay.
+const TrackSnd={
+    ctx:null,osc:null,gain:null,
+    toggle(){
+        Snd.toggle();   // persists to localStorage, syncs everywhere
+        document.getElementById('snd-btn').textContent=Snd.on?'♪ ON':'♪ OFF';
+    },
+    init(){if(this.ctx)return;
+        try{
+            this.ctx=new(window.AudioContext||window.webkitAudioContext)();
+            this.osc=this.ctx.createOscillator();this.gain=this.ctx.createGain();
+            const f=this.ctx.createBiquadFilter();f.type='lowpass';f.frequency.value=600;
+            this.osc.type='sawtooth';this.osc.frequency.value=60;this.gain.gain.value=0;
+            this.osc.connect(f);f.connect(this.gain);this.gain.connect(this.ctx.destination);this.osc.start();
+        }catch(e){}
+    },
+    update(on){
+        if(!this.ctx||!Snd.on){if(this.ctx&&this.gain)this.gain.gain.setTargetAtTime(0,this.ctx.currentTime,.1);return}
+        const t=this.ctx.currentTime;
+        if(on){this.gain.gain.setTargetAtTime(.08,t,.08);this.osc.frequency.setTargetAtTime(140,t,.08)}
+        else{this.gain.gain.setTargetAtTime(0,t,.15);this.osc.frequency.setTargetAtTime(60,t,.1)}
+    },
+    // Hard mute — used during pause to stop the drone immediately
+    mute(){if(this.ctx&&this.gain)this.gain.gain.setTargetAtTime(0,this.ctx.currentTime,.05)}
+};
+
+const PRESETS={
+    easy:{speed:2,size:60,chaos:2},
+    medium:{speed:3.5,size:45,chaos:4},
+    hard:{speed:5.5,size:30,chaos:7}
+};
+
+const UI={
+    diff:'medium', time:45,
+    speed:3.5, size:45, chaos:4,
+    challenge:'normal',
+    tuneOpen:false,
+
+    toggleTune(){
+        this.tuneOpen=!this.tuneOpen;
+        document.getElementById('tune-toggle').classList.toggle('open',this.tuneOpen);
+        document.getElementById('tune-panel').classList.toggle('open',this.tuneOpen);
+        Snd.tick(494);
+    },
+
+    // Difficulty preset sets speed/size/chaos together, and syncs the sliders
+    setDiff(k,btn){
+        this.diff=k;BM.selectPb(btn);
+        const p=PRESETS[k];
+        this.speed=p.speed;this.size=p.size;this.chaos=p.chaos;
+        // Sync sliders to reflect preset
+        document.getElementById('sl-speed').value=p.speed;
+        document.getElementById('sl-speed-v').textContent=p.speed.toFixed(1);
+        document.getElementById('sl-size').value=p.size;
+        document.getElementById('sl-size-v').textContent=p.size+'px';
+        document.getElementById('sl-chaos').value=p.chaos;
+        document.getElementById('sl-chaos-v').textContent=p.chaos;
+        this.refreshSummary();
+    },
+    setTime(v,btn){this.time=v;BM.selectPb(btn);this.refreshSummary()},
+
+    setChallenge(c,btn){
+        this.challenge=c;BM.selectPb(btn);
+        document.getElementById('challenge-hint').textContent = c==='survival'
+            ? I18N.t('trk.hint.surv')
+            : I18N.t('trk.hint.normal');
+        this.refreshSummary();
+    },
+
+    // Manual slider edit → de-syncs the difficulty preset highlight
+    updSlider(key){
+        const el=document.getElementById('sl-'+key);const v=parseFloat(el.value);
+        if(key==='speed'){this.speed=v;document.getElementById('sl-speed-v').textContent=v.toFixed(1)}
+        else if(key==='size'){this.size=v;document.getElementById('sl-size-v').textContent=v+'px'}
+        else if(key==='chaos'){this.chaos=v;document.getElementById('sl-chaos-v').textContent=v}
+        this.syncDiffHighlight();
+        this.refreshSummary();
+    },
+
+    // If current speed/size/chaos matches a preset exactly, highlight it; else clear
+    syncDiffHighlight(){
+        let matched='';
+        for(const [k,p] of Object.entries(PRESETS)){
+            if(p.speed===this.speed && p.size===this.size && p.chaos===this.chaos){ matched=k; break; }
+        }
+        this.diff=matched;
+        document.querySelectorAll('#t-diff .pb').forEach(b=>{
+            const k=b.getAttribute('onclick').match(/'(\w+)'/)[1];
+            b.classList.toggle('on',k===matched);
+        });
+    },
+
+    refreshSummary(){
+        const diffLabel = this.diff ? I18N.t('m.'+this.diff) : I18N.t('m.custom').replace('…','');
+        if(this.challenge==='survival'){
+            document.getElementById('qs-mode-value').textContent=I18N.t('m.survival').split(' —')[0];
+            document.getElementById('qs-mode-sub').textContent=`${diffLabel} ${I18N.t('trk.start')} · ${I18N.t('trk.lives3')} · ${I18N.t('trk.sub.surv')}`;
+        } else {
+            document.getElementById('qs-mode-value').textContent =
+                this.time===0 ? I18N.t('m.endless') : this.time+(I18N.lang==='es'?' segundos':' seconds');
+            document.getElementById('qs-mode-sub').textContent=`${diffLabel} · ${I18N.t('trk.sub.normal')}`;
+        }
+    }
+};
+
+const Game={
+    active:false,paused:false,mode:'',lastMode:'',
+    pos:{x:0,y:0},vel:{x:0,y:0},mouse:{x:0,y:0},
+    speed:0,size:50,chaos:3,
+    totalF:0,trackF:0,timeLeft:0,elapsed:0,
+    lives:0,maxLives:0,offTargetTime:0,maxSpeed:0,
+    timerI:null,frameId:null,elapsedI:null,
+    progressive:false, progEvery:15,    // custom-mode progression
+    timed:true,                          // false → ∞ duration
+    qs:null,
+    // Cached DOM refs (populated in launch) — avoids getElementById per frame,
+    // which was the main source of the mousemove lag.
+    el:{},
+    // Track last-rendered states to skip redundant style writes
+    _lastOn:null, _lastPill:null,
+
+    cacheEls(){
+        this.el = {
+            tgt:    document.getElementById('tgt'),
+            beam:   document.getElementById('beam'),
+            xhair:  document.getElementById('xhair'),
+            pill:   document.getElementById('status-pill'),
+            arena:  document.getElementById('arena'),
+            hEff:   document.getElementById('h-eff'),
+            hTot:   document.getElementById('h-tot'),
+            hTm:    document.getElementById('h-tm'),
+            effFill:document.getElementById('eff-fill'),
+            effVal: document.getElementById('eff-val')
+        };
+        // Bind the loop once so rAF reuses the same function reference
+        if(!this._boundLoop) this._boundLoop = () => this.loop();
+    },
+
+    launch(){
+        TrackSnd.init();
+        this.mode = UI.challenge === 'survival' ? 'survival' : 'normal';
+        this.lastMode = this.mode;
+        this.diff = UI.diff;
+        this.totalF=0;this.trackF=0;this.elapsed=0;this.offTargetTime=0;this.maxSpeed=0;
+        this.paused=false;
+
+        if(this.mode==='survival'){
+            this.speed=2;this.size=45;this.chaos=2;
+            this.timeLeft=0;this.timed=false;
+            this.lives=3;this.maxLives=3;
+            this.progressive=true;this.progEvery=15;
+        } else {
+            this.speed=UI.speed;this.size=UI.size;this.chaos=UI.chaos;
+            this.timed=UI.time!==0;
+            this.timeLeft=this.timed?UI.time:0;
+            this.lives=0;this.maxLives=0;
+            this.progressive=false;
+        }
+        this.maxSpeed=this.speed;this.active=true;
+
+        document.getElementById('setup').classList.add('hide');
+        document.getElementById('res').classList.add('hide');
+        document.getElementById('hud').classList.add('on');
+        document.getElementById('status').classList.add('on');
+        document.getElementById('eff-wrap').classList.add('on');
+        document.getElementById('xhair').style.display='block';
+        document.body.style.cursor='none';
+        this.cacheEls();
+        // Promote animated elements to their own compositor layer
+        this.el.tgt.style.willChange = 'transform';
+        this.el.beam.style.willChange = 'transform';
+        this.el.xhair.style.willChange = 'transform';
+        this._lastOn = null; this._lastPill = null;
+
+        this.el.tgt.style.display='block';this.el.tgt.style.width=this.size+'px';this.el.tgt.style.height=this.size+'px';
+        this.pos={x:innerWidth/2,y:innerHeight/2};
+        this.newDir();
+        document.getElementById('h-tm').textContent=this.timed?this.timeLeft:'∞';
+        document.getElementById('h-tdot').style.background=this.mode==='survival'?'var(--miss)':'var(--accent)';
+        BM.drawLives('#h-lives',this.lives,this.maxLives,'sm');
+        this.updateHUD();
+
+        if(this.timed)this.startTimer();
+        this.elapsedI=this.scheduler.setInterval(()=>{
+            if(!this.active||this.paused)return;
+            this.elapsed=Math.floor(this.clock.now()/1000);
+            // Survival progression — speed & chaos climb, lives recover
+            if(this.mode==='survival'){
+                if(this.elapsed%15===0){this.speed+=0.3;this.chaos=Math.min(10,this.chaos+0.3);this.maxSpeed=Math.max(this.maxSpeed,this.speed)}
+                if(this.elapsed%60===0&&this.lives<this.maxLives){this.lives++;BM.drawLives('#h-lives',this.lives,this.maxLives,'sm')}
+            }
+            // Custom/normal progression (only if progressive flag is set)
+            else if(this.progressive){
+                if(this.elapsed%this.progEvery===0){
+                    this.speed+=0.3;
+                    this.chaos=Math.min(10,this.chaos+0.3);
+                    this.maxSpeed=Math.max(this.maxSpeed,this.speed);
+                }
+            }
+        },1000);
+
+        if(this.qs && this.qs.btn) this.qs.btn.classList.add('on');
+        this.loop();
+    },
+
+    retry(){this.launch()},
+    toSetup(){
+        document.getElementById('res').classList.add('hide');
+        document.getElementById('setup').classList.remove('hide');
+        if(this.qs && this.qs.btn) this.qs.btn.classList.remove('on');
+    },
+
+    // ── Pause / Resume ──
+    pause(){
+        if(!this.active || this.paused)return;
+        this.paused=true;
+        this.scheduler.clear(this.frameId);
+        this.scheduler.clear(this.timerI);
+        this.scheduler.clear(this.elapsedI);
+        TrackSnd.mute();
+        document.body.style.cursor='default';
+        document.getElementById('xhair').style.display='none';
+        // Fade the beam/status while paused so it's clearly inactive
+        document.getElementById('beam').style.opacity='0';
+        const pill=document.getElementById('status-pill');
+        pill.textContent=I18N.t('time.st.paused');
+        pill.classList.remove('locked');
+    },
+    resume(){
+        if(!this.active || !this.paused)return;
+        this.paused=false;
+        document.body.style.cursor='none';
+        document.getElementById('xhair').style.display='block';
+        if(this.timed && this.timeLeft>0)this.startTimer();
+        // Restart elapsed interval continuing from current `this.elapsed`
+        this.elapsedI=this.scheduler.setInterval(()=>{
+            if(!this.active||this.paused)return;
+            this.elapsed=Math.floor(this.clock.now()/1000);
+            if(this.mode==='survival'){
+                if(this.elapsed%15===0){this.speed+=0.3;this.chaos=Math.min(10,this.chaos+0.3);this.maxSpeed=Math.max(this.maxSpeed,this.speed)}
+                if(this.elapsed%60===0&&this.lives<this.maxLives){this.lives++;BM.drawLives('#h-lives',this.lives,this.maxLives,'sm')}
+            } else if(this.mode==='custom'&&this.progressive){
+                if(this.elapsed%this.progEvery===0){
+                    this.speed+=0.3;
+                    this.chaos=Math.min(10,this.chaos+0.3);
+                    this.maxSpeed=Math.max(this.maxSpeed,this.speed);
+                }
+            }
+        },1000);
+        this.loop();
+    },
+    exit(){
+        this.active=false;this.paused=false;
+        this.scheduler.clear(this.frameId);
+        this.scheduler.clear(this.timerI);this.scheduler.clear(this.elapsedI);
+        TrackSnd.mute();
+        document.body.style.cursor='default';
+    },
+
+    newDir(){const a=Math.random()*Math.PI*2;this.vel={x:Math.cos(a)*this.speed,y:Math.sin(a)*this.speed}},
+
+    loop(){
+        if(!this.active || this.paused)return;
+        const dt=this.clock.step("motion"), frames=dt*60;
+        this.pos.x+=this.vel.x*frames;this.pos.y+=this.vel.y*frames;
+        const pad=this.size;
+        if(this.pos.x<pad||this.pos.x>innerWidth-pad){this.vel.x*=-1;this.pos.x=Math.max(pad,Math.min(this.pos.x,innerWidth-pad))}
+        if(this.pos.y<pad||this.pos.y>innerHeight-pad){this.vel.y*=-1;this.pos.y=Math.max(pad,Math.min(this.pos.y,innerHeight-pad))}
+        if(Math.random()<1-Math.pow(1-this.chaos*.004,frames))this.newDir();
+
+        const el = this.el;
+
+        // Move target (transform only — no layout)
+        el.tgt.style.transform=`translate(${this.pos.x-this.size/2}px,${this.pos.y-this.size/2}px)`;
+
+        const dx=this.mouse.x-this.pos.x,dy=this.mouse.y-this.pos.y;
+        const dist=Math.sqrt(dx*dx+dy*dy);
+        const isOn=dist<this.size/2*1.15;
+
+        this.totalF+=frames;
+        if(isOn){this.trackF+=frames;this.offTargetTime=0}
+        else{this.offTargetTime+=dt}
+
+        if(this.mode==='survival'&&this.offTargetTime>=2-1e-9){
+            this.offTargetTime=0;this.lives--;BM.drawLives('#h-lives',this.lives,this.maxLives,'sm');
+            el.arena.style.boxShadow='inset 0 0 80px rgba(255,34,85,.3)';
+            this.scheduler.setTimeout(()=>el.arena.style.boxShadow='none',200);
+            if(this.lives<=0){this.end();return}
+        }
+
+        // Beam: use scaleX (composited) instead of width (reflow).
+        // The beam element is 1px wide at rest; scaleX stretches it to `dist`.
+        const angle=Math.atan2(this.pos.y-this.mouse.y,this.pos.x-this.mouse.x)*180/Math.PI;
+        el.beam.style.transform=`translate(${this.mouse.x}px,${this.mouse.y}px) rotate(${angle}deg) scaleX(${dist})`;
+        el.beam.style.opacity=isOn?'0.6':dist<300?(1-dist/300)*.3:'0';
+
+        // Only rewrite on/off-dependent styles when the state actually flips.
+        if(isOn!==this._lastOn){
+            this._lastOn=isOn;
+            el.tgt.classList.toggle('on',isOn);
+            el.beam.style.background=isOn?'var(--hit)':'var(--accent)';
+            el.beam.style.boxShadow=isOn?'0 0 8px var(--hit)':'0 0 8px var(--accent)';
+            el.pill.textContent=isOn?BM.text('EN OBJETIVO','LOCKED ON'):BM.text('BUSCANDO','SEARCHING');
+            el.pill.classList.toggle('locked',isOn);
+            TrackSnd.update(isOn);
+        }
+
+        if(this.clock.now()-(this._hudAt||0)>=100){this._hudAt=this.clock.now();this.updateHUD();}
+
+        this.frameId=this.scheduler.requestAnimationFrame(this._boundLoop);
+    },
+
+    updateHUD(){
+        const eff=this.totalF>0?(this.trackF/this.totalF*100).toFixed(1):0;
+        const e=this.el;
+        const col=eff>60?'var(--hit)':'var(--accent)';
+        e.hEff.textContent=eff+'%';
+        e.hEff.style.color=col;
+        e.hTot.textContent=(this.trackF/60).toFixed(1)+'s';
+        if(this.timed)e.hTm.textContent=this.timeLeft;
+        e.effFill.style.width=eff+'%';
+        e.effFill.classList.toggle('good',eff>60);
+        e.effVal.textContent=eff+'%';
+        e.effVal.style.color=col;
+    },
+
+    startTimer(){this.timerI=this.scheduler.setInterval(()=>{this.timeLeft=Math.max(0,Math.ceil(this.sessionDuration-this.clock.now()/1000-(this.timePenalty||0)));this.updateHUD();if(this.timeLeft<=0)this.end()},1000)},
+
+    end(){
+        this.active=false;this.paused=false;
+        this.scheduler.clear(this.frameId);this.scheduler.clear(this.timerI);this.scheduler.clear(this.elapsedI);
+        TrackSnd.update(false);
+        document.getElementById('tgt').style.display='none';
+        document.getElementById('beam').style.opacity='0';
+        document.body.style.cursor='default';
+        document.getElementById('xhair').style.display='none';
+        document.getElementById('hud').classList.remove('on');
+        document.getElementById('status').classList.remove('on');
+        document.getElementById('eff-wrap').classList.remove('on');
+        if(this.qs && this.qs.btn) this.qs.btn.classList.remove('on');
+
+        const eff=this.totalF>0?(this.trackF/this.totalF*100).toFixed(1):0;
+        const effNum=parseFloat(eff);
+        document.getElementById('r-mode').textContent=this.mode==='survival'?I18N.t('trk.survover'):I18N.t('m.complete');
+        document.getElementById('r-eff').textContent=eff+'%';
+        document.getElementById('r-tot').textContent=(this.trackF/60).toFixed(1)+'s';
+        document.getElementById('r-dur').textContent=this.elapsed.toFixed(1)+'s';
+        document.getElementById('r-spd').textContent=this.maxSpeed.toFixed(1);
+        document.getElementById('r-avg').textContent=eff+'%';
+
+        const ring=document.getElementById('r-ring');
+        ring.style.strokeDashoffset='408';
+        this.scheduler.setTimeout(()=>{ring.style.strokeDashoffset=408-(effNum/100)*408;
+            ring.style.stroke=effNum>60?'var(--hit)':'var(--accent)'},100);
+
+        // ── Persist BEFORE comparison; bucket by difficulty (or survival) ──
+        const bucket = this.mode==='survival' ? 'surv' : (this.diff || 'custom');
+        const bestKey = 'lock_' + bucket;
+        const priorBest = Store.getBest(MODULE, bestKey);
+
+        Store.saveSession(MODULE,{
+            mode:this.mode, diff:this.diff, lockPct:effNum, trackedMs:Math.round(this.trackF/60*1000),
+            efficiency:effNum, duration:this.elapsed, maxSpeed:this.maxSpeed,
+            onTargetPct:effNum, score:Math.round(effNum*10)
+        });
+        Store.saveBest(MODULE, bestKey, effNum, true);
+        Store.saveBest(MODULE, 'score', Math.round(effNum*10), true);  // legacy
+
+        // ── Comparison line ──
+        const cmpEl=document.getElementById('r-compare');
+        const bucketLabel = this.mode==='survival' ? (I18N.lang==='es'?'supervivencia':'survival')
+            : (this.diff ? I18N.t('m.'+this.diff).toLowerCase() : I18N.t('m.custom').replace('…','').toLowerCase());
+        if(this.totalF===0){
+            cmpEl.className='res-compare worse';
+            cmpEl.innerHTML='<span class="ar">—</span> ' + I18N.t('trk.nodata');
+        } else if(priorBest===null||priorBest===undefined){
+            cmpEl.className='res-compare record';
+            cmpEl.innerHTML=`<span class="ar">★</span> ${I18N.lang==='es'?'Primera sesión '+bucketLabel+' — tu base':'First '+bucketLabel+' session — your baseline'}`;
+        } else {
+            const diff = effNum - priorBest;
+            if(diff>0.05){
+                cmpEl.className='res-compare record';
+                cmpEl.innerHTML=`<span class="ar">▲</span> ${I18N.t('m.res.newbest')} · +${diff.toFixed(1)}% ${I18N.t('trk.over')}`;
+            } else if(Math.abs(diff)<=0.05){
+                cmpEl.className='res-compare better';
+                cmpEl.innerHTML=`<span class="ar">=</span> ${I18N.t('m.res.matched')} (${priorBest.toFixed(1)}%)`;
+            } else {
+                cmpEl.className='res-compare worse';
+                cmpEl.innerHTML=`<span class="ar">▾</span> ${Math.abs(diff).toFixed(1)}% ${I18N.t('trk.below')} (${priorBest.toFixed(1)}%)`;
+            }
+        }
+
+        // ── Evolution (same bucket) ──
+        this.renderEvolution(bucket, effNum);
+
+        document.getElementById('res').classList.remove('hide');
+    },
+
+    renderEvolution(bucket, currentLock){
+        const bars=document.getElementById('r-evo-bars');
+        const bestSpan=document.getElementById('r-evo-best');
+        const all=Store.getSessions(MODULE)||[];
+        const sameKind=all.filter(s=>{
+            const b = s.mode==='survival' ? 'surv' : (s.diff || 'custom');
+            return b===bucket && typeof s.lockPct==='number';
+        }).slice(-12);
+        if(sameKind.length===0){
+            bars.innerHTML=`<div class="res-evo-empty">${I18N.t('trk.evoempty')}</div>`;
+            bestSpan.textContent='';
+            return;
+        }
+        const max=Math.max(...sameKind.map(s=>s.lockPct),currentLock,1);
+        bestSpan.textContent=I18N.t('m.res.best')+' '+max.toFixed(1)+'%';
+        bars.innerHTML='';
+        sameKind.forEach((s,i)=>{
+            const bar=document.createElement('div');
+            bar.className='res-evo-bar'+(i===sameKind.length-1?' latest':'');
+            bar.style.height='0%';
+            bar.title=s.lockPct.toFixed(1)+'%';
+            bars.appendChild(bar);
+            const h=(s.lockPct/max)*100;
+            this.scheduler.requestAnimationFrame(()=>{ bar.style.height=Math.max(5,h)+'%'; });
+        });
+    }
+};
+
+// Crosshair follows the cursor. Use transform (composited) instead of
+// left/top (layout) to avoid reflow on every mouse event. We pin the element
+// to 0,0 and translate from there.
+const _xhair = document.getElementById('xhair');
+_xhair.style.left = '0px';
+_xhair.style.top = '0px';
+window.addEventListener('mousemove',e=>{
+    _xhair.style.transform=`translate(${e.clientX}px,${e.clientY}px)`;
+    Game.mouse.x=e.clientX;Game.mouse.y=e.clientY;
+});
+if(!Snd.on) document.getElementById('snd-btn').textContent='♪ OFF';
+
+// Initialize difficulty preset (medium) + summary
+UI.setDiff('medium', document.querySelector('#t-diff .pb.on'));
+UI.refreshSummary();
+
+// Re-render dynamic text on language change (static data-i18n auto-updates)
+window.addEventListener('langchange', () => {
+    UI.refreshSummary();
+    UI.setChallenge(UI.challenge, document.querySelector('#t-challenge .pb.on'));
+});
+
+// Quick switcher — pause + module nav
+BM.attachTraining({module:MODULE,game:Game,ui:UI,start:'launch',finish:'end',onPause:()=>TrackSnd.mute(),onResume:()=>{Game._lastOn=null;}});
+Game.qs = BM.mountQuickSwitcher({
+    current: MODULE,
+    onPause:  () => Game.pause(),
+    onResume: () => Game.resume(),
+    onExit:   () => Game.exit()
+});
+</script>
+</body>
+</html>

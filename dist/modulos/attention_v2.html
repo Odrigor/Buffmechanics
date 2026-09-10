@@ -1,0 +1,769 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BuffMechanics | Attention Split</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' fill='%233b82f6'/%3E%3Ctext x='50%25' y='54%25' text-anchor='middle' dominant-baseline='middle' font-family='monospace' font-size='40' font-weight='700' fill='%23ffffff'%3EB%3C/text%3E%3Crect x='2' y='2' width='60' height='60' fill='none' stroke='%23ffffff' stroke-width='3'/%3E%3C/svg%3E">
+    <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="../assets/shared.css">
+    <style>
+        :root{
+            --accent:#3b82f6;
+            --accent-dim:rgba(59,130,246,.12);
+            --track:#00e5ff;
+            --track-dim:rgba(0,229,255,.15);
+        }
+        body{height:100vh;overflow:hidden;cursor:crosshair}
+
+        #arena{position:fixed;inset:0;z-index:0;
+            background-image:linear-gradient(rgba(255,255,255,.015) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.015) 1px,transparent 1px);
+            background-size:60px 60px}
+
+        /* Tracking sphere */
+        #sphere{position:absolute;width:48px;height:48px;border-radius:50%;transform:translate(-50%,-50%);z-index:10;display:none;transition:border-color .15s,box-shadow .15s}
+        .sph-outer{width:100%;height:100%;border-radius:50%;border:2px solid var(--accent);position:relative;display:flex;align-items:center;justify-content:center}
+        .sph-core{width:30%;height:30%;border-radius:50%;background:var(--accent);box-shadow:0 0 10px var(--accent);transition:all .15s}
+        #sphere.locked .sph-outer{border-color:var(--track);background:var(--track-dim);box-shadow:0 0 24px var(--track-dim)}
+        #sphere.locked .sph-core{background:var(--track);box-shadow:0 0 14px var(--track)}
+
+        /* Number node */
+        .node{position:absolute;width:64px;height:64px;transform:translate(-50%,-50%) scale(0);z-index:20;pointer-events:none;animation:nodeIn .15s cubic-bezier(.34,1.56,.64,1) forwards}
+        @keyframes nodeIn{to{transform:translate(-50%,-50%) scale(1)}}
+        .node-inner{width:100%;height:100%;background:var(--sf);border:2px solid var(--hit);border-radius:8px;display:flex;align-items:center;justify-content:center;font-family:'Rajdhani',sans-serif;font-size:32px;font-weight:700;color:var(--hit);transition:all .2s;box-shadow:0 0 20px rgba(0,255,136,.3)}
+        .node-timer{position:absolute;bottom:-4px;left:0;right:0;height:2px;background:var(--bd);border-radius:1px;overflow:hidden}
+        .node-timer-fill{height:100%;background:var(--hit);transition:width linear}
+        .node.warn .node-inner{border-color:var(--warn);color:var(--warn);box-shadow:0 0 20px rgba(251,191,36,.3)}
+        .node.warn .node-timer-fill{background:var(--warn)}
+        .node.danger .node-inner{border-color:var(--miss);color:var(--miss);box-shadow:0 0 20px rgba(255,34,85,.3)}
+        .node.danger .node-timer-fill{background:var(--miss)}
+
+        /* Burst / miss */
+        .burst{position:absolute;transform:translate(-50%,-50%);pointer-events:none;z-index:15;border:2px solid var(--hit);border-radius:8px;animation:brst .3s ease-out forwards}
+        @keyframes brst{0%{width:64px;height:64px;opacity:1}100%{width:96px;height:96px;opacity:0}}
+        .miss-x{position:absolute;transform:translate(-50%,-50%);pointer-events:none;z-index:15;color:var(--miss);font-size:40px;font-weight:700;animation:mx .4s ease-out forwards}
+        @keyframes mx{0%{opacity:1;transform:translate(-50%,-50%) scale(1)}100%{opacity:0;transform:translate(-50%,-80%) scale(.7)}}
+
+        /* Status pill */
+        .status{position:fixed;top:58px;left:50%;transform:translateX(-50%);z-index:100;pointer-events:none;opacity:0;transition:opacity .3s}
+        .status.on{opacity:1}
+        .status-pill{padding:3px 14px;border-radius:12px;font-family:'Space Mono',monospace;font-size:9px;font-weight:700;letter-spacing:.1em;border:1px solid var(--bd);background:var(--sf);transition:all .15s}
+        .status-pill.locked{border-color:var(--track);color:var(--track);background:var(--track-dim)}
+
+        /* Keys hint */
+        .keys-hint{position:fixed;top:90px;left:50%;transform:translateX(-50%);z-index:100;pointer-events:none;opacity:0;transition:opacity .3s;display:flex;gap:4px}
+        .keys-hint.on{opacity:1}
+        .key-hint{width:20px;height:20px;background:var(--sf);border:1px solid var(--bd);display:flex;align-items:center;justify-content:center;font-family:'Space Mono',monospace;font-size:10px;font-weight:700;color:var(--t2);border-radius:3px}
+
+        .rcard .rgrid:first-of-type{grid-template-columns:1fr 1fr 1fr}
+
+        /* ═══ Quick Start + Tune ═══ */
+        .qs-card{display:flex;flex-direction:column;align-items:center;max-width:440px;width:100%;margin:0 auto}
+        .qs-mode{width:100%;text-align:center;background:var(--sf);border:1px solid var(--bd);padding:18px 20px;margin-bottom:12px;transition:border-color .2s}
+        .qs-mode-label{font-family:'Space Mono',monospace;font-size:9px;letter-spacing:.18em;color:var(--t3);text-transform:uppercase;margin-bottom:6px}
+        .qs-mode-value{font-size:24px;font-weight:700;letter-spacing:.02em;color:var(--t1);line-height:1}
+        .qs-mode-sub{font-family:'Space Mono',monospace;font-size:10px;color:var(--t2);margin-top:6px;letter-spacing:.04em}
+        .tune-toggle{width:100%;display:flex;align-items:center;justify-content:center;gap:8px;background:none;border:1px solid var(--bd);color:var(--t2);font-family:'Space Mono',monospace;font-size:10px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;padding:10px;cursor:pointer;margin-bottom:12px;transition:all .2s}
+        .tune-toggle:hover{border-color:var(--t2);color:var(--t1)}
+        .tune-toggle .chev{transition:transform .3s;display:inline-block}
+        .tune-toggle.open .chev{transform:rotate(90deg)}
+        .tune-panel{width:100%;overflow:hidden;max-height:0;opacity:0;transition:max-height .35s cubic-bezier(.4,0,.2,1),opacity .25s,margin .35s;margin-bottom:0}
+        .tune-panel.open{max-height:1000px;opacity:1;margin-bottom:12px}
+        .tune-inner{background:var(--sf);border:1px solid var(--bd);padding:18px 18px 14px}
+        .tune-adv-divider{display:flex;align-items:center;gap:10px;margin:16px 0 12px;font-family:'Space Mono',monospace;font-size:8px;letter-spacing:.16em;color:var(--t3);text-transform:uppercase}
+        .tune-adv-divider::before,.tune-adv-divider::after{content:'';flex:1;height:1px;background:var(--bd)}
+
+        /* ═══ Redesigned results ═══ */
+        .res-metric{text-align:center;margin-bottom:6px}
+        .res-metric-value{font-size:56px;font-weight:700;color:var(--accent);line-height:1;letter-spacing:-1px}
+        .res-metric-unit{font-size:22px;color:var(--t2);font-weight:700;margin-left:4px}
+        .res-metric-label{font-family:'Space Mono',monospace;font-size:9px;letter-spacing:.16em;color:var(--t3);text-transform:uppercase;margin-top:6px}
+        .res-subduo{display:flex;justify-content:center;gap:28px;margin:10px 0 4px}
+        .res-subduo-item{text-align:center}
+        .res-subduo-v{font-size:22px;font-weight:700;line-height:1}
+        .res-subduo-l{font-family:'Space Mono',monospace;font-size:8px;letter-spacing:.14em;color:var(--t3);text-transform:uppercase;margin-top:4px}
+        .res-compare{text-align:center;font-family:'Space Mono',monospace;font-size:12px;letter-spacing:.04em;margin:14px 0;min-height:20px}
+        .res-compare.better{color:var(--hit)}
+        .res-compare.worse{color:var(--t2)}
+        .res-compare.record{color:var(--gold,#eab308)}
+        .res-compare .ar{font-weight:700;margin-right:4px}
+        .res-evo{margin:16px 0;padding:0 4px}
+        .res-evo-title{font-family:'Space Mono',monospace;font-size:8px;letter-spacing:.16em;color:var(--t3);text-transform:uppercase;margin-bottom:8px;display:flex;justify-content:space-between}
+        .res-evo-bars{display:flex;align-items:flex-end;gap:3px;height:50px}
+        .res-evo-bar{flex:1;background:var(--accent);opacity:.35;min-height:3px;border-radius:1px;transition:height .4s cubic-bezier(.4,0,.2,1),opacity .2s}
+        .res-evo-bar.latest{opacity:.95}
+        .res-evo-bar:hover{opacity:1}
+        .res-evo-empty{font-family:'Space Mono',monospace;font-size:9px;color:var(--t3);text-align:center;padding:14px 0;letter-spacing:.1em}
+        .res-details{display:flex;justify-content:center;gap:18px;flex-wrap:wrap;font-family:'Space Mono',monospace;font-size:10px;color:var(--t2);margin:14px 0;letter-spacing:.04em}
+        .res-details b{color:var(--t1);font-weight:700}
+    </style>
+<link rel="stylesheet" href="../assets/experience.css">
+<link rel="stylesheet" href="../assets/workspace.css">
+</head>
+<body>
+<div id="arena">
+    <div id="sphere"><div class="sph-outer"><div class="sph-core"></div></div></div>
+</div>
+
+<!-- HUD -->
+<div class="hud" id="hud">
+    <div class="hb"><span class="hl" data-i18n="att.score">Score</span><span class="hv" style="color:var(--accent)" id="h-sc">0</span></div>
+    <div class="hb c">
+        <div class="tpill"><div class="tdot" id="h-tdot"></div><span class="hv" id="h-tm" style="font-size:20px">60</span></div>
+        <div class="lives" id="h-lives" style="margin-top:4px"></div>
+    </div>
+    <div class="hb r"><span class="hl" data-i18n="att.accuracy">Accuracy</span><span class="hv" id="h-ac">100%</span></div>
+</div>
+<div class="status" id="status"><div class="status-pill" id="status-pill">TRACKING LOST</div></div>
+<div class="keys-hint" id="keys-hint">
+    <div class="key-hint">1</div><div class="key-hint">2</div><div class="key-hint">3</div><div class="key-hint">4</div>
+</div>
+<div class="streak-wrap" id="stwrap">
+    <div class="spips" id="stbar"></div>
+    <span class="slbl" id="stval">×0</span>
+</div>
+
+<!-- SETUP -->
+<div class="setup" id="setup">
+    <button class="snd-toggle" id="snd-btn" onclick="Snd.toggle()">♪ ON</button>
+    <div class="setup-logo">SPL</div>
+    <div class="stitle">ATTENTION <em>SPLIT</em></div>
+    <div class="ssub" data-i18n="att.sub">Track the sphere. React to the numbers.</div>
+
+    <div class="qs-card">
+        <div class="qs-mode" id="qs-mode">
+            <div class="qs-mode-label" data-i18n="m.mode">Mode</div>
+            <div class="qs-mode-value" id="qs-mode-value">60 seconds</div>
+            <div class="qs-mode-sub" id="qs-mode-sub">Medium · track the sphere, react to numbers</div>
+        </div>
+
+        <button class="tune-toggle" id="tune-toggle" onclick="UI.toggleTune()">
+            <span class="chev">▸</span> <span data-i18n="m.tune">Tune</span>
+        </button>
+
+        <div class="tune-panel" id="tune-panel">
+            <div class="tune-inner">
+                <!-- Difficulty preset -->
+                <div class="pgroup"><div class="plabel" data-i18n="m.difficulty">Difficulty</div>
+                    <div class="pbtn-row" id="t-diff">
+                        <button class="pb" onclick="UI.setDiff('easy',this)" data-i18n="m.easy">Easy</button>
+                        <button class="pb on" onclick="UI.setDiff('medium',this)" data-i18n="m.medium">Medium</button>
+                        <button class="pb" onclick="UI.setDiff('hard',this)" data-i18n="m.hard">Hard</button>
+                    </div>
+                </div>
+
+                <!-- Duration -->
+                <div class="pgroup"><div class="plabel" data-i18n="m.duration">Duration</div>
+                    <div class="pbtn-row" id="t-time">
+                        <button class="pb" onclick="UI.setTime(45,this)">45s</button>
+                        <button class="pb on" onclick="UI.setTime(60,this)">60s</button>
+                        <button class="pb" onclick="UI.setTime(90,this)">90s</button>
+                        <button class="pb" onclick="UI.setTime(0,this)">∞</button>
+                    </div>
+                </div>
+
+                <!-- ── Advanced ── -->
+                <div class="tune-adv-divider" data-i18n="m.advanced">Advanced</div>
+
+                <div class="pgroup"><div class="plabel" data-i18n="m.challenge">Challenge</div>
+                    <div class="pbtn-row" id="t-challenge">
+                        <button class="pb on" onclick="UI.setChallenge('normal',this)" data-i18n="m.normal">Normal</button>
+                        <button class="pb" onclick="UI.setChallenge('survival',this)" data-i18n="m.survival">Survival — 3 lives</button>
+                    </div>
+                    <div class="mono" style="font-size:9px;color:var(--t3);margin-top:6px;line-height:1.5" id="challenge-hint" data-i18n="att.hint.normal">
+                        Normal: train for the set duration.
+                    </div>
+                </div>
+
+                <div class="pgroup"><div class="plabel" data-i18n="att.spherespeed">Sphere speed</div>
+                    <div class="slider-wrap">
+                        <span class="mono" style="font-size:9px;color:var(--t3)" data-i18n="m.slow">Slow</span>
+                        <input type="range" id="sl-speed" min="1" max="4" value="2.2" step="0.1" oninput="UI.updSlider('speed')">
+                        <span class="mono" style="font-size:9px;color:var(--t3)" data-i18n="m.fast">Fast</span>
+                        <span class="slider-val" id="sl-speed-v">2.2</span>
+                    </div>
+                </div>
+                <div class="pgroup"><div class="plabel" data-i18n="att.nodefreq">Node frequency (lower = more nodes)</div>
+                    <div class="slider-wrap">
+                        <span class="mono" style="font-size:9px;color:var(--t3)" data-i18n="m.often">Often</span>
+                        <input type="range" id="sl-freq" min="600" max="2000" value="1100" step="100" oninput="UI.updSlider('freq')">
+                        <span class="mono" style="font-size:9px;color:var(--t3)" data-i18n="m.rare">Rare</span>
+                        <span class="slider-val" id="sl-freq-v">1.1s</span>
+                    </div>
+                </div>
+                <div class="pgroup"><div class="plabel" data-i18n="att.respwindow">Response window</div>
+                    <div class="slider-wrap">
+                        <span class="mono" style="font-size:9px;color:var(--t3)" data-i18n="m.short">Short</span>
+                        <input type="range" id="sl-react" min="800" max="2500" value="1400" step="100" oninput="UI.updSlider('react')">
+                        <span class="mono" style="font-size:9px;color:var(--t3)" data-i18n="m.long">Long</span>
+                        <span class="slider-val" id="sl-react-v">1.4s</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <button class="gobtn" style="width:100%" onclick="Game.launch()" data-i18n="m.start">▶ START</button>
+        <button class="gobtn-back" onmouseenter="Snd.tick(660)" onclick="BM.backToHome()" data-i18n="m.back">← BACK TO MENU</button>
+    </div>
+
+    <div class="hint" data-i18n="att.hint">Keep cursor on sphere AND press the number when it appears.</div>
+</div>
+
+<!-- RESULTS -->
+<div class="res hide" id="res">
+    <div class="rcard">
+        <div class="hl" id="r-mode" style="text-align:center;margin-bottom:10px">SESSION COMPLETE</div>
+
+        <!-- Primary metric: focus score (accuracy × lock, the dual-task quality) -->
+        <div class="res-metric">
+            <span class="res-metric-value" id="r-primary">0</span><span class="res-metric-unit">/100</span>
+            <div class="res-metric-label" data-i18n="att.metric">Focus score · accuracy × lock</div>
+        </div>
+
+        <!-- The two component skills -->
+        <div class="res-subduo">
+            <div class="res-subduo-item">
+                <div class="res-subduo-v" style="color:var(--hit)" id="r-acc">0%</div>
+                <div class="res-subduo-l" data-i18n="att.reactacc">Reaction accuracy</div>
+            </div>
+            <div class="res-subduo-item">
+                <div class="res-subduo-v" style="color:var(--track,#3b82f6)" id="r-lock">0%</div>
+                <div class="res-subduo-l" data-i18n="att.lockrate">Sphere lock rate</div>
+            </div>
+        </div>
+
+        <!-- Comparison -->
+        <div class="res-compare" id="r-compare"></div>
+
+        <!-- Evolution -->
+        <div class="res-evo">
+            <div class="res-evo-title"><span data-i18n="m.recent">Recent sessions</span><span id="r-evo-best"></span></div>
+            <div class="res-evo-bars" id="r-evo-bars"></div>
+        </div>
+
+        <!-- Details -->
+        <div class="res-details" id="r-details"></div>
+
+        <div class="rbtns">
+            <button class="rb-s" onclick="location.href='../index.html'" data-i18n="m.exit">EXIT</button>
+            <button class="rb-s" onclick="Game.toSetup()" data-i18n="m.menu">MENU</button>
+            <button class="rb-p" onclick="Game.retry()" data-i18n="m.retry">RETRY</button>
+        </div>
+    </div>
+</div>
+
+<script src="../assets/i18n.js"></script>
+<script src="../assets/shared.js"></script>
+<script src="../assets/history.js"></script>
+<script src="../assets/training-core.js"></script>
+<script src="../assets/routine.js"></script>
+<script src="../assets/experience.js"></script>
+<script>
+const MODULE='attention';
+
+const PRESETS={
+    easy:{speed:1.5,freqMs:1400,reactMs:1800},
+    medium:{speed:2.2,freqMs:1100,reactMs:1400},
+    hard:{speed:3,freqMs:800,reactMs:1100}
+};
+
+const UI={
+    diff:'medium', time:60,
+    speed:2.2, freq:1100, react:1400,
+    challenge:'normal',
+    tuneOpen:false,
+
+    toggleTune(){
+        this.tuneOpen=!this.tuneOpen;
+        document.getElementById('tune-toggle').classList.toggle('open',this.tuneOpen);
+        document.getElementById('tune-panel').classList.toggle('open',this.tuneOpen);
+        Snd.tick(698);
+    },
+
+    setDiff(k,btn){
+        this.diff=k;BM.selectPb(btn);
+        const p=PRESETS[k];
+        this.speed=p.speed;this.freq=p.freqMs;this.react=p.reactMs;
+        // Sync sliders
+        document.getElementById('sl-speed').value=p.speed;
+        document.getElementById('sl-speed-v').textContent=p.speed.toFixed(1);
+        document.getElementById('sl-freq').value=p.freqMs;
+        document.getElementById('sl-freq-v').textContent=(p.freqMs/1000).toFixed(1)+'s';
+        document.getElementById('sl-react').value=p.reactMs;
+        document.getElementById('sl-react-v').textContent=(p.reactMs/1000).toFixed(1)+'s';
+        this.refreshSummary();
+    },
+    setTime(v,btn){this.time=v;BM.selectPb(btn);this.refreshSummary()},
+
+    setChallenge(c,btn){
+        this.challenge=c;BM.selectPb(btn);
+        document.getElementById('challenge-hint').textContent = c==='survival'
+            ? I18N.t('att.hint.surv')
+            : I18N.t('att.hint.normal');
+        this.refreshSummary();
+    },
+
+    updSlider(k){
+        if(k==='speed'){this.speed=+document.getElementById('sl-speed').value;document.getElementById('sl-speed-v').textContent=this.speed.toFixed(1)}
+        else if(k==='freq'){this.freq=+document.getElementById('sl-freq').value;document.getElementById('sl-freq-v').textContent=(this.freq/1000).toFixed(1)+'s'}
+        else if(k==='react'){this.react=+document.getElementById('sl-react').value;document.getElementById('sl-react-v').textContent=(this.react/1000).toFixed(1)+'s'}
+        this.syncDiffHighlight();
+        this.refreshSummary();
+    },
+
+    syncDiffHighlight(){
+        let matched='';
+        for(const [k,p] of Object.entries(PRESETS)){
+            if(p.speed===this.speed && p.freqMs===this.freq && p.reactMs===this.react){ matched=k; break; }
+        }
+        this.diff=matched;
+        document.querySelectorAll('#t-diff .pb').forEach(b=>{
+            const k=b.getAttribute('onclick').match(/'(\w+)'/)[1];
+            b.classList.toggle('on',k===matched);
+        });
+    },
+
+    refreshSummary(){
+        const diffLabel = this.diff ? I18N.t('m.'+this.diff) : I18N.t('m.custom').replace('…','');
+        if(this.challenge==='survival'){
+            document.getElementById('qs-mode-value').textContent=I18N.t('m.survival').split(' —')[0];
+            document.getElementById('qs-mode-sub').textContent=`${diffLabel} ${I18N.t('att.start')} · ${I18N.t('att.lives3')} · ${I18N.t('att.sub.surv')}`;
+        } else {
+            document.getElementById('qs-mode-value').textContent =
+                this.time===0 ? I18N.t('m.endless') : this.time+(I18N.lang==='es'?' segundos':' seconds');
+            document.getElementById('qs-mode-sub').textContent=`${diffLabel} · ${I18N.t('att.sub.normal')}`;
+        }
+    }
+};
+
+const Game={
+    active:false, paused:false, mode:'',lastMode:'',
+    pos:{x:0,y:0},vel:{x:0,y:0},mouse:{x:0,y:0},
+    speed:3,freqMs:1200,reactMs:1600,
+    // Base values for progressive modes (survival and custom-progressive).
+    // These are the starting points before the elapsed-time ramp is applied.
+    baseSpeed:3, baseFreq:1200, baseReact:1600,
+    score:0,hits:0,misses:0,streak:0,maxStreak:0,
+    totalF:0,lockF:0,reactionTimes:[],
+    timeLeft:0,elapsed:0,
+    lives:0,maxLives:0,
+    isLocked:false,
+    currentNode:null,nodeAppearTime:0,
+    timerI:null,frameId:null,elapsedI:null,spawnI:null,
+    dirChangeTimer:null,
+    timed:true,
+    progressive:false,
+    qs:null,
+
+    launch(){
+        Snd.init();
+        this.mode = UI.challenge === 'survival' ? 'survival' : 'normal';
+        this.lastMode=this.mode;
+        this.diff=UI.diff;
+        this.score=0;this.hits=0;this.misses=0;this.streak=0;this.maxStreak=0;
+        this.totalF=0;this.lockF=0;this.reactionTimes=[];this.elapsed=0;
+        this.currentNode=null;this.isLocked=false;
+        this.paused=false;
+
+        if(this.mode==='survival'){
+            this.speed=1.3;this.freqMs=1500;this.reactMs=1800;
+            this.timeLeft=0;this.timed=false;
+            this.lives=3;this.maxLives=3;
+            this.progressive=true;   // survival = built-in progressive
+        } else {
+            this.speed=UI.speed;this.freqMs=UI.freq;this.reactMs=UI.react;
+            this.timed=UI.time!==0;
+            this.timeLeft=this.timed?UI.time:0;
+            this.lives=0;this.maxLives=0;
+            this.progressive=false;
+        }
+        // Snapshot base values for progressive ramp formula
+        this.baseSpeed=this.speed; this.baseFreq=this.freqMs; this.baseReact=this.reactMs;
+        this.active=true;
+
+        document.getElementById('setup').classList.add('hide');
+        document.getElementById('res').classList.add('hide');
+        document.getElementById('hud').classList.add('on');
+        document.getElementById('status').classList.add('on');
+        document.getElementById('keys-hint').classList.add('on');
+        document.getElementById('stwrap').classList.add('on');
+
+        // Cache the sphere + status pill (avoid getElementById per frame)
+        this._sphere = document.getElementById('sphere');
+        this._pill = document.getElementById('status-pill');
+        this._sphere.style.display='block';
+        this._sphere.style.willChange='transform';
+        this._lastLocked=null;
+        this.pos={x:innerWidth/2,y:innerHeight/2};
+        this.newDirection();
+        this.scheduleDirChange();
+
+        document.getElementById('h-tm').textContent=this.timed?this.timeLeft:'∞';
+        document.getElementById('h-tdot').style.background=this.mode==='survival'?'var(--miss)':'var(--accent)';
+        BM.drawLives('#h-lives',this.lives,this.maxLives,'sm');BM.buildPips('#stbar',30);
+        this.updateHUD();
+
+        if(this.qs && this.qs.btn) this.qs.btn.classList.add('on');
+
+        this.loop();
+        this.scheduleNode();
+        if(this.timed)this.startTimer();
+        this.startElapsedInterval();
+    },
+
+    // Extracted so resume() can re-establish the same per-second tick.
+    // Survival and custom-progressive both ramp difficulty here.
+    startElapsedInterval(){
+        this.scheduler.clear(this.elapsedI);
+        this.elapsedI=this.scheduler.setInterval(()=>{
+            if(!this.active || this.paused)return;
+            this.elapsed=Math.floor(this.clock.now()/1000);
+            if(this.progressive){
+                // Same ramp formula for survival and custom-progressive,
+                // parametrized by base values captured at launch.
+                this.speed   = Math.min(4,   this.baseSpeed + this.elapsed*0.025);
+                this.freqMs  = Math.max(500, this.baseFreq  - this.elapsed*12);
+                this.reactMs = Math.max(900, this.baseReact - this.elapsed*10);
+            }
+        },1000);
+    },
+
+    retry(){this.launch()},
+    toSetup(){
+        document.getElementById('res').classList.add('hide');
+        document.getElementById('setup').classList.remove('hide');
+        if(this.qs && this.qs.btn) this.qs.btn.classList.remove('on');
+    },
+
+    // ── Pause / Resume — semantics: everything halts, current node is
+    //    discarded without penalty (pending warn/danger/miss timeouts have
+    //    idempotent guards so they no-op once currentNode is cleared).
+    //    Sphere position preserved. Survival ramp clock is also paused. ──
+    pause(){
+        if(!this.active || this.paused)return;
+        this.paused=true;
+        this.scheduler.clear(this.spawnI);
+        this.scheduler.clear(this.dirChangeTimer);
+        this.scheduler.clear(this.timerI);
+        this.scheduler.clear(this.elapsedI);
+        this.scheduler.clear(this.frameId);
+        if(this.currentNode && this.currentNode.el && this.currentNode.el.parentNode){
+            this.currentNode.el.remove();
+        }
+        this.currentNode=null;
+        // Visual: status pill becomes PAUSED
+        const pill=document.getElementById('status-pill');
+        pill.textContent=I18N.t('time.st.paused');
+        pill.classList.remove('locked');
+    },
+    resume(){
+        if(!this.active || !this.paused)return;
+        this.paused=false;
+        this._lastLocked=null;   // force pill/sphere redraw out of PAUSED state
+        this.scheduleDirChange();
+        this.scheduleNode();
+        if(this.timed && this.timeLeft>0)this.startTimer();
+        this.startElapsedInterval();
+        this.loop();
+    },
+    exit(){
+        this.active=false;this.paused=false;
+        this.scheduler.clear(this.timerI);this.scheduler.clear(this.elapsedI);
+        this.scheduler.clear(this.spawnI);this.scheduler.clear(this.dirChangeTimer);
+        this.scheduler.clear(this.frameId);
+    },
+
+    newDirection(){
+        const a=Math.random()*Math.PI*2;
+        this.vel={x:Math.cos(a)*this.speed,y:Math.sin(a)*this.speed};
+    },
+
+    scheduleDirChange(){
+        this.scheduler.clear(this.dirChangeTimer);
+        const ms=1500+Math.random()*3000;
+        this.dirChangeTimer=this.scheduler.setTimeout(()=>{
+            if(!this.active || this.paused)return;
+            this.newDirection();
+            this.scheduleDirChange();
+        },ms);
+    },
+
+    loop(){
+        if(!this.active || this.paused)return;
+
+        const dt=this.clock.step("motion"), frames=dt*60;
+        this.pos.x+=this.vel.x*frames;this.pos.y+=this.vel.y*frames;
+        const pad=60;
+        if(this.pos.x<pad||this.pos.x>innerWidth-pad){this.vel.x*=-1;this.pos.x=Math.max(pad,Math.min(this.pos.x,innerWidth-pad))}
+        if(this.pos.y<pad+60||this.pos.y>innerHeight-pad-60){this.vel.y*=-1;this.pos.y=Math.max(pad+60,Math.min(this.pos.y,innerHeight-pad-60))}
+
+        const sph=this._sphere;
+        // translate(-50%,-50%) centers the sphere; append the position offset.
+        sph.style.transform=`translate(-50%,-50%) translate(${this.pos.x}px,${this.pos.y}px)`;
+
+        const dx=this.mouse.x-this.pos.x,dy=this.mouse.y-this.pos.y;
+        const dist=Math.sqrt(dx*dx+dy*dy);
+        this.isLocked=dist<28;
+
+        // Only rewrite lock-dependent styles when the state flips
+        if(this.isLocked!==this._lastLocked){
+            this._lastLocked=this.isLocked;
+            sph.classList.toggle('locked',this.isLocked);
+            this._pill.textContent=this.isLocked?BM.text('EN OBJETIVO','FOCUS LOCKED'):BM.text('FUERA DEL OBJETIVO','TRACKING LOST');
+            this._pill.classList.toggle('locked',this.isLocked);
+        }
+
+        this.totalF+=frames;
+        if(this.isLocked)this.lockF+=frames;
+
+        this.frameId=this.scheduler.requestAnimationFrame(this._boundLoop || (this._boundLoop=()=>this.loop()));
+    },
+
+    scheduleNode(){
+        if(!this.active || this.paused)return;
+        this.scheduler.clear(this.spawnI);
+        this.spawnI=this.scheduler.setTimeout(()=>{
+            this.spawnNode();
+            this.scheduleNode();
+        },this.freqMs);
+    },
+
+    spawnNode(){
+        if(!this.active || this.paused || !this.isLocked || this.currentNode)return;
+
+        const num=1+Math.floor(Math.random()*4);
+        const node=document.createElement('div');
+        node.className='node';
+        node.innerHTML=`<div class="node-inner">${num}</div><div class="node-timer"><div class="node-timer-fill"></div></div>`;
+
+        const pad=100;
+        let x,y,attempts=0;
+        do{
+            x=pad+Math.random()*(innerWidth-pad*2);
+            y=pad+Math.random()*(innerHeight-pad*2);
+            attempts++;
+            if(attempts>20)break;
+        }while(Math.hypot(x-this.pos.x,y-this.pos.y)<150||Math.hypot(x-this.mouse.x,y-this.mouse.y)<120);
+
+        node.style.left=x+'px';node.style.top=y+'px';
+        document.getElementById('arena').appendChild(node);
+
+        this.currentNode={el:node,num,x,y,appearTime:this.clock.now()};
+        Snd.appear();
+
+        const fill=node.querySelector('.node-timer-fill');
+        fill.style.width='100%';
+        fill.style.transitionDuration=this.reactMs+'ms';
+        this.scheduler.requestAnimationFrame(()=>fill.style.width='0%');
+
+        this.scheduler.setTimeout(()=>{if(this.currentNode&&this.currentNode.el===node)node.classList.add('warn')},this.reactMs*.5);
+        this.scheduler.setTimeout(()=>{if(this.currentNode&&this.currentNode.el===node)node.classList.add('danger')},this.reactMs*.8);
+
+        this.scheduler.setTimeout(()=>{
+            if(this.currentNode&&this.currentNode.el===node){
+                this.showMissX(x,y);
+                node.remove();
+                this.currentNode=null;
+                this.missed();
+            }
+        },this.reactMs);
+    },
+
+    handleKey(key){
+        if(!this.active || this.paused || !this.currentNode)return;
+        const n=parseInt(key);
+        if(isNaN(n)||n<1||n>4)return;
+
+        const {el,num,x,y,appearTime}=this.currentNode;
+        this.currentNode=null;
+
+        if(n===num){
+            const rt=this.clock.now()-appearTime;
+            this.reactionTimes.push(rt);
+            this.hits++;this.streak++;
+            if(this.streak>this.maxStreak)this.maxStreak=this.streak;
+
+            const speedBonus=Math.max(0,Math.round((this.reactMs-rt)/10));
+            this.score+=100+speedBonus+this.streak*5;
+
+            Snd.hit();
+            el.remove();
+
+            const b=document.createElement('div');b.className='burst';
+            b.style.left=x+'px';b.style.top=y+'px';
+            document.getElementById('arena').appendChild(b);
+            this.scheduler.setTimeout(()=>b.remove(),300);
+
+            if(this.mode==='survival'&&this.hits%30===0&&this.lives<this.maxLives){
+                this.lives++;BM.drawLives('#h-lives',this.lives,this.maxLives,'sm');
+            }
+        }else{
+            el.remove();
+            this.showMissX(x,y);
+            this.missed();
+        }
+        BM.updatePips('#stbar',this.streak,'#stval');
+        this.updateHUD();
+    },
+
+    missed(){
+        this.misses++;this.streak=0;BM.updatePips('#stbar',0,'#stval');
+        Snd.miss();
+        if(this.mode==='survival'){
+            this.lives--;BM.drawLives('#h-lives',this.lives,this.maxLives,'sm');
+            document.getElementById('arena').style.boxShadow='inset 0 0 80px rgba(255,34,85,.3)';
+            this.scheduler.setTimeout(()=>document.getElementById('arena').style.boxShadow='none',200);
+            if(this.lives<=0)this.end();
+        }
+        this.updateHUD();
+    },
+
+    showMissX(x,y){
+        const m=document.createElement('div');m.className='miss-x';
+        m.textContent='✕';m.style.left=x+'px';m.style.top=y+'px';
+        document.getElementById('arena').appendChild(m);this.scheduler.setTimeout(()=>m.remove(),400);
+    },
+
+    updateHUD(){
+        document.getElementById('h-sc').textContent=this.score;
+        const total=this.hits+this.misses;
+        const acc=total>0?Math.round(this.hits/total*100):0;
+        document.getElementById('h-ac').textContent=acc+'%';
+        if(this.timed)document.getElementById('h-tm').textContent=this.timeLeft;
+    },
+
+    startTimer(){this.timerI=this.scheduler.setInterval(()=>{this.timeLeft=Math.max(0,Math.ceil(this.sessionDuration-this.clock.now()/1000-(this.timePenalty||0)));this.updateHUD();if(this.timeLeft<=0)this.end()},1000)},
+
+    end(){
+        this.active=false;this.paused=false;
+        this.scheduler.clear(this.timerI);this.scheduler.clear(this.elapsedI);this.scheduler.clear(this.spawnI);this.scheduler.clear(this.dirChangeTimer);
+        this.scheduler.clear(this.frameId);
+        if(this.currentNode&&this.currentNode.el.parentNode)this.currentNode.el.remove();
+        this.currentNode=null;
+        document.getElementById('sphere').style.display='none';
+        document.getElementById('hud').classList.remove('on');
+        document.getElementById('status').classList.remove('on');
+        document.getElementById('keys-hint').classList.remove('on');
+        document.getElementById('stwrap').classList.remove('on');
+        if(this.qs && this.qs.btn) this.qs.btn.classList.remove('on');
+
+        const total=this.hits+this.misses;
+        const acc=total>0?Math.round(this.hits/total*100):0;
+        const avgRt=this.reactionTimes.length>0?Math.round(this.reactionTimes.reduce((a,b)=>a+b,0)/this.reactionTimes.length):0;
+        const lockPct=this.totalF>0?Math.round(this.lockF/this.totalF*100):0;
+        // Focus score = the dual-task quality. Both tasks must be done well:
+        // accuracy (reaction task) × lock rate (tracking task), 0–100.
+        const focusScore=Math.round((acc/100)*(lockPct/100)*100);
+
+        document.getElementById('r-mode').textContent =
+            (this.mode==='survival'?I18N.t('att.survover'):I18N.t('m.complete'));
+        document.getElementById('r-primary').textContent=focusScore;
+        document.getElementById('r-acc').textContent=acc+'%';
+        document.getElementById('r-lock').textContent=lockPct+'%';
+
+        // ── Persist BEFORE comparison; bucket by difficulty (or survival) ──
+        const bucket = this.mode==='survival' ? 'surv' : (this.diff || 'custom');
+        const bestKey = 'focus_' + bucket;
+        const priorBest = Store.getBest(MODULE, bestKey);
+
+        Store.saveSession(MODULE,{
+            mode:this.mode, diff:this.diff, focusScore,
+            hits:this.hits, acc, avgRt, lockPct, maxStreak:this.maxStreak,
+            score:this.score
+        });
+        if(total>0) Store.saveBest(MODULE, bestKey, focusScore, true);
+        Store.saveBest(MODULE, 'score', this.score, true);  // legacy
+
+        // ── Comparison line ──
+        const cmpEl=document.getElementById('r-compare');
+        const bucketLabel = this.mode==='survival' ? (I18N.lang==='es'?'supervivencia':'survival') : (this.diff ? I18N.t('m.'+this.diff).toLowerCase() : I18N.t('m.custom').replace('…','').toLowerCase());
+        if(total===0){
+            cmpEl.className='res-compare worse';
+            cmpEl.innerHTML='<span class="ar">—</span> ' + I18N.t('att.nonodes');
+        } else if(priorBest===null||priorBest===undefined){
+            cmpEl.className='res-compare record';
+            cmpEl.innerHTML=`<span class="ar">★</span> ${I18N.lang==='es'?'Primera sesión '+bucketLabel+' — tu base':'First '+bucketLabel+' session — your baseline'}`;
+        } else {
+            const diff = focusScore - priorBest;
+            if(diff>0){
+                cmpEl.className='res-compare record';
+                cmpEl.innerHTML=`<span class="ar">▲</span> ${I18N.t('m.res.newbest')} · +${diff} ${I18N.t('att.over')}`;
+            } else if(diff===0){
+                cmpEl.className='res-compare better';
+                cmpEl.innerHTML=`<span class="ar">=</span> ${I18N.t('m.res.matched')} (${priorBest})`;
+            } else {
+                cmpEl.className='res-compare worse';
+                cmpEl.innerHTML=`<span class="ar">▾</span> ${Math.abs(diff)} ${I18N.t('att.below')} (${priorBest})`;
+            }
+        }
+
+        // ── Evolution (same bucket) ──
+        this.renderEvolution(bucket, focusScore);
+
+        // ── Details ──
+        document.getElementById('r-details').innerHTML =
+            `<span>${I18N.t('att.d.correct')} <b>${this.hits}</b>/${total}</span>` +
+            `<span>${I18N.t('att.d.avgreact')} <b>${avgRt}ms</b></span>` +
+            `<span>${I18N.t('att.d.beststreak')} <b>${this.maxStreak}</b></span>`;
+
+        document.getElementById('res').classList.remove('hide');
+    },
+
+    renderEvolution(bucket, currentScore){
+        const bars=document.getElementById('r-evo-bars');
+        const bestSpan=document.getElementById('r-evo-best');
+        const all=Store.getSessions(MODULE)||[];
+        const sameKind=all.filter(s=>{
+            const b = s.mode==='survival' ? 'surv' : (s.diff || 'custom');
+            return b===bucket && typeof s.focusScore==='number';
+        }).slice(-12);
+        if(sameKind.length===0){
+            bars.innerHTML=`<div class="res-evo-empty">${I18N.t('att.evoempty')}</div>`;
+            bestSpan.textContent='';
+            return;
+        }
+        const max=Math.max(...sameKind.map(s=>s.focusScore),currentScore,1);
+        bestSpan.textContent=I18N.t('m.res.best')+' '+max;
+        bars.innerHTML='';
+        sameKind.forEach((s,i)=>{
+            const bar=document.createElement('div');
+            bar.className='res-evo-bar'+(i===sameKind.length-1?' latest':'');
+            bar.style.height='0%';
+            bar.title=s.focusScore;
+            bars.appendChild(bar);
+            const h=(s.focusScore/max)*100;
+            this.scheduler.requestAnimationFrame(()=>{ bar.style.height=Math.max(5,h)+'%'; });
+        });
+    }
+};
+
+window.addEventListener('mousemove',e=>{Game.mouse.x=e.clientX;Game.mouse.y=e.clientY});
+window.addEventListener('keydown',e=>{
+    if(e.repeat)return;
+    // If quick switcher is open, ignore game keys
+    if(Game.qs && Game.qs.isOpen) return;
+    Game.handleKey(e.key);
+});
+if(!Snd.on) document.getElementById('snd-btn').textContent='♪ OFF';
+
+// Initialize difficulty preset (medium) + summary
+UI.setDiff('medium', document.querySelector('#t-diff .pb.on'));
+UI.refreshSummary();
+
+// Re-render dynamic text on language change (static data-i18n auto-updates)
+window.addEventListener('langchange', () => {
+    UI.refreshSummary();
+    UI.setChallenge(UI.challenge, document.querySelector('#t-challenge .pb.on'));
+});
+
+// Quick switcher — pause + module nav
+BM.attachTraining({module:MODULE,game:Game,ui:UI,start:'launch',finish:'end'});
+Game.qs = BM.mountQuickSwitcher({
+    current: MODULE,
+    onPause:  () => Game.pause(),
+    onResume: () => Game.resume(),
+    onExit:   () => Game.exit()
+});
+</script>
+</body>
+</html>

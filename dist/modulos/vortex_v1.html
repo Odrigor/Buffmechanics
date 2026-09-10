@@ -1,0 +1,883 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BuffMechanics | Vortex</title>
+    <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="../assets/shared.css">
+    <style>
+        :root{
+            --accent:#a855f7;
+            --accent-dim:rgba(168,85,247,.12);
+            --lit:#c084fc;
+            --lit-dim:rgba(192,132,252,.18);
+            --zone:#22d3ee;
+        }
+        body{height:100vh;overflow:hidden;cursor:crosshair}
+
+        #arena{position:fixed;inset:0;z-index:0;
+            background-image:radial-gradient(circle at center, rgba(168,85,247,.04), transparent 60%),
+                             linear-gradient(rgba(255,255,255,.015) 1px,transparent 1px),
+                             linear-gradient(90deg,rgba(255,255,255,.015) 1px,transparent 1px);
+            background-size:auto, 60px 60px, 60px 60px}
+
+        /* The vortex core — an SVG oval split into 4 wedges (X cut) */
+        #vortex-wrap{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);z-index:5;pointer-events:none}
+        #vortex{display:block;overflow:visible}
+        .wedge{fill:var(--sf2);stroke:var(--bd);stroke-width:1.5;transition:fill .12s,stroke .12s,filter .12s}
+        .wedge.lit{fill:var(--lit-dim);stroke:var(--lit);filter:drop-shadow(0 0 12px var(--lit-dim))}
+        .core-ring{fill:none;stroke:var(--bd);stroke-width:1.5}
+        .core-dot{fill:var(--accent);opacity:.5}
+        /* The target band (hard mode) — a wide strip straddling the oval edge */
+        .zone-band{fill:none;stroke:var(--zone);stroke-width:54;opacity:.10}
+        .zone-ring{fill:none;stroke:var(--zone);stroke-width:1.5;stroke-dasharray:4 5;opacity:.45;animation:zoneSpin 14s linear infinite}
+        @keyframes zoneSpin{to{stroke-dashoffset:-180}}
+        .wedge-letter{font-family:'Space Mono',monospace;font-weight:700;fill:var(--t3);text-anchor:middle;dominant-baseline:central;font-size:11px;letter-spacing:.1em}
+
+        /* Converging spheres — a letter inside a glowing orb */
+        .orb{position:absolute;width:44px;height:44px;transform:translate(-50%,-50%) scale(0);z-index:20;pointer-events:none;
+             animation:orbIn .18s cubic-bezier(.34,1.56,.64,1) forwards}
+        @keyframes orbIn{to{transform:translate(-50%,-50%) scale(1)}}
+        .orb-body{width:100%;height:100%;border-radius:50%;border:2px solid var(--accent);background:var(--sf);
+                  display:flex;align-items:center;justify-content:center;
+                  font-family:'Rajdhani',sans-serif;font-size:22px;font-weight:700;color:var(--accent);
+                  box-shadow:0 0 16px var(--accent-dim);transition:border-color .12s,color .12s,box-shadow .12s}
+        /* When the mouse points at this orb's wedge, it "arms" (ready to pop) */
+        .orb.armed .orb-body{border-color:var(--lit);color:var(--lit);box-shadow:0 0 22px var(--lit-dim)}
+        /* When inside the target zone (hard mode), it glows cyan */
+        .orb.inzone .orb-body{border-color:var(--zone);color:var(--zone);box-shadow:0 0 24px rgba(34,211,238,.4)}
+
+        /* Burst on a clean pop */
+        .burst{position:absolute;transform:translate(-50%,-50%);pointer-events:none;z-index:15;border:2px solid var(--lit);border-radius:50%;animation:brst .34s ease-out forwards}
+        @keyframes brst{0%{width:44px;height:44px;opacity:1}100%{width:104px;height:104px;opacity:0}}
+        /* Particle shards on pop */
+        .shard{position:absolute;width:4px;height:4px;border-radius:50%;background:var(--lit);transform:translate(-50%,-50%);pointer-events:none;z-index:16;animation:shardFly .42s ease-out forwards}
+        @keyframes shardFly{0%{opacity:1}100%{opacity:0}}
+        /* Perfect-zone pop is cyan and bigger */
+        .burst.perfect{border-color:var(--zone);animation:brstP .42s ease-out forwards}
+        @keyframes brstP{0%{width:44px;height:44px;opacity:1}100%{width:128px;height:128px;opacity:0}}
+        .miss-x{position:absolute;transform:translate(-50%,-50%);pointer-events:none;z-index:15;color:var(--miss);font-size:34px;font-weight:700;animation:mx .42s ease-out forwards}
+        @keyframes mx{0%{opacity:1;transform:translate(-50%,-50%) scale(1)}100%{opacity:0;transform:translate(-50%,-78%) scale(.7)}}
+
+        /* Aim indicator — a faint line from core toward the mouse */
+        #aim-line{position:fixed;left:50%;top:50%;transform-origin:0 0;height:2px;width:0;
+                  background:linear-gradient(90deg, var(--lit), transparent);z-index:6;pointer-events:none;opacity:0;transition:opacity .2s}
+        #aim-line.on{opacity:.55}
+
+        /* Status pill */
+        .status{position:fixed;top:58px;left:50%;transform:translateX(-50%);z-index:100;pointer-events:none;opacity:0;transition:opacity .3s}
+        .status.on{opacity:1}
+        .status-pill{padding:3px 14px;border-radius:12px;font-family:'Space Mono',monospace;font-size:9px;font-weight:700;letter-spacing:.1em;border:1px solid var(--bd);background:var(--sf);transition:all .15s}
+        .status-pill.locked{border-color:var(--lit);color:var(--lit);background:var(--lit-dim)}
+
+        /* Keys hint */
+        .keys-hint{position:fixed;top:90px;left:50%;transform:translateX(-50%);z-index:100;pointer-events:none;opacity:0;transition:opacity .3s;display:flex;gap:4px}
+        .keys-hint.on{opacity:1}
+        .key-hint{width:22px;height:22px;background:var(--sf);border:1px solid var(--bd);display:flex;align-items:center;justify-content:center;font-family:'Space Mono',monospace;font-size:11px;font-weight:700;color:var(--t2);border-radius:3px}
+
+        /* ═══ Quick Start + Tune ═══ */
+        .qs-card{display:flex;flex-direction:column;align-items:center;max-width:440px;width:100%;margin:0 auto}
+        .qs-mode{width:100%;text-align:center;background:var(--sf);border:1px solid var(--bd);padding:18px 20px;margin-bottom:12px;transition:border-color .2s}
+        .qs-mode-label{font-family:'Space Mono',monospace;font-size:9px;letter-spacing:.18em;color:var(--t3);text-transform:uppercase;margin-bottom:6px}
+        .qs-mode-value{font-size:24px;font-weight:700;letter-spacing:.02em;color:var(--t1);line-height:1}
+        .qs-mode-sub{font-family:'Space Mono',monospace;font-size:10px;color:var(--t2);margin-top:6px;letter-spacing:.04em}
+        .tune-toggle{width:100%;display:flex;align-items:center;justify-content:center;gap:8px;background:none;border:1px solid var(--bd);color:var(--t2);font-family:'Space Mono',monospace;font-size:10px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;padding:10px;cursor:pointer;margin-bottom:12px;transition:all .2s}
+        .tune-toggle:hover{border-color:var(--t2);color:var(--t1)}
+        .tune-toggle .chev{transition:transform .3s;display:inline-block}
+        .tune-toggle.open .chev{transform:rotate(90deg)}
+        .tune-panel{width:100%;overflow:hidden;max-height:0;opacity:0;transition:max-height .35s cubic-bezier(.4,0,.2,1),opacity .25s,margin .35s;margin-bottom:0}
+        .tune-panel.open{max-height:1200px;opacity:1;margin-bottom:12px}
+        .tune-inner{background:var(--sf);border:1px solid var(--bd);padding:18px 18px 14px}
+        .tune-adv-divider{display:flex;align-items:center;gap:10px;margin:16px 0 12px;font-family:'Space Mono',monospace;font-size:8px;letter-spacing:.16em;color:var(--t3);text-transform:uppercase}
+        .tune-adv-divider::before,.tune-adv-divider::after{content:'';flex:1;height:1px;background:var(--bd)}
+
+        /* ═══ Results ═══ */
+        .res-metric{text-align:center;margin-bottom:6px}
+        .res-metric-value{font-size:56px;font-weight:700;color:var(--accent);line-height:1;letter-spacing:-1px}
+        .res-metric-unit{font-size:22px;color:var(--t2);font-weight:700;margin-left:4px}
+        .res-metric-label{font-family:'Space Mono',monospace;font-size:9px;letter-spacing:.16em;color:var(--t3);text-transform:uppercase;margin-top:6px}
+        .res-subduo{display:flex;justify-content:center;gap:28px;margin:10px 0 4px}
+        .res-subduo-item{text-align:center}
+        .res-subduo-v{font-size:22px;font-weight:700;line-height:1}
+        .res-subduo-l{font-family:'Space Mono',monospace;font-size:8px;letter-spacing:.14em;color:var(--t3);text-transform:uppercase;margin-top:4px}
+        .res-compare{text-align:center;font-family:'Space Mono',monospace;font-size:12px;letter-spacing:.04em;margin:14px 0;min-height:20px}
+        .res-compare.better{color:var(--hit)}
+        .res-compare.worse{color:var(--t2)}
+        .res-compare.record{color:var(--gold,#eab308)}
+        .res-compare .ar{font-weight:700;margin-right:4px}
+        .res-evo{margin:16px 0;padding:0 4px}
+        .res-evo-title{font-family:'Space Mono',monospace;font-size:8px;letter-spacing:.16em;color:var(--t3);text-transform:uppercase;margin-bottom:8px;display:flex;justify-content:space-between}
+        .res-evo-bars{display:flex;align-items:flex-end;gap:3px;height:50px}
+        .res-evo-bar{flex:1;background:var(--accent);opacity:.35;min-height:3px;border-radius:1px;transition:height .4s cubic-bezier(.4,0,.2,1),opacity .2s}
+        .res-evo-bar.latest{opacity:.95}
+        .res-evo-empty{font-family:'Space Mono',monospace;font-size:9px;color:var(--t3);text-align:center;padding:14px 0;letter-spacing:.1em}
+        .res-details{display:flex;justify-content:center;gap:18px;flex-wrap:wrap;font-family:'Space Mono',monospace;font-size:10px;color:var(--t2);margin:14px 0;letter-spacing:.04em}
+        .res-details b{color:var(--t1);font-weight:700}
+    </style>
+<link rel="stylesheet" href="../assets/experience.css">
+<link rel="stylesheet" href="../assets/workspace.css">
+</head>
+<body>
+<div id="arena"></div>
+<div id="aim-line"></div>
+
+<!-- The vortex core: oval split into 4 wedges (NW, NE, SW, SE) -->
+<div id="vortex-wrap">
+    <svg id="vortex" width="300" height="200" viewBox="0 0 300 200">
+        <defs>
+            <clipPath id="ovalClip"><ellipse cx="150" cy="100" rx="140" ry="90"/></clipPath>
+        </defs>
+        <g clip-path="url(#ovalClip)">
+            <!-- 4 wedges, X-cut from center (150,100) to the 4 corners -->
+            <polygon class="wedge" id="w-nw" points="150,100 0,0 0,200"/>      <!-- left  -->
+            <polygon class="wedge" id="w-ne" points="150,100 0,0 300,0"/>      <!-- top   -->
+            <polygon class="wedge" id="w-se" points="150,100 300,0 300,200"/>  <!-- right -->
+            <polygon class="wedge" id="w-sw" points="150,100 300,200 0,200"/>  <!-- bottom-->
+        </g>
+        <ellipse cx="150" cy="100" rx="140" ry="90" fill="none" stroke="var(--bd)" stroke-width="2"/>
+        <!-- target band (hard mode): wide strip straddling the oval edge -->
+        <g id="zone-ring" style="display:none">
+            <ellipse class="zone-band" cx="150" cy="100" rx="140" ry="90"/>
+            <ellipse class="zone-ring" cx="150" cy="100" rx="140" ry="90"/>
+        </g>
+        <ellipse class="core-ring" cx="150" cy="100" rx="20" ry="13"/>
+        <circle class="core-dot" cx="150" cy="100" r="3"/>
+    </svg>
+</div>
+
+<!-- HUD -->
+<div class="hud" id="hud">
+    <div class="hb"><span class="hl" data-i18n="vx.score">Score</span><span class="hv" style="color:var(--accent)" id="h-sc">0</span></div>
+    <div class="hb c">
+        <div class="tpill"><div class="tdot" id="h-tdot"></div><span class="hv" id="h-tm" style="font-size:20px">60</span></div>
+        <div class="lives" id="h-lives" style="margin-top:4px"></div>
+    </div>
+    <div class="hb r"><span class="hl" data-i18n="vx.accuracy">Accuracy</span><span class="hv" id="h-ac">100%</span></div>
+</div>
+<div class="status" id="status"><div class="status-pill" id="status-pill" data-i18n="vx.aimlost">AIM LOST</div></div>
+<div class="keys-hint" id="keys-hint"></div>
+<div class="streak-wrap" id="stwrap">
+    <div class="spips" id="stbar"></div>
+    <span class="slbl" id="stval">×0</span>
+</div>
+
+<!-- SETUP -->
+<div class="setup" id="setup">
+    <button class="snd-toggle" id="snd-btn" onclick="Snd.toggle()">♪ ON</button>
+    <div class="setup-logo">VTX</div>
+    <div class="stitle">VOR<em>TEX</em></div>
+    <div class="ssub" data-i18n="vx.sub">Aim the wedge. Pop the letter.</div>
+
+    <div class="qs-card">
+        <div class="qs-mode" id="qs-mode">
+            <div class="qs-mode-label" data-i18n="m.mode">Mode</div>
+            <div class="qs-mode-value" id="qs-mode-value">60 seconds</div>
+            <div class="qs-mode-sub" id="qs-mode-sub">Medium · aim and pop</div>
+        </div>
+
+        <button class="tune-toggle" id="tune-toggle" onclick="UI.toggleTune()">
+            <span class="chev">▸</span> <span data-i18n="m.tune">Tune</span>
+        </button>
+
+        <div class="tune-panel" id="tune-panel">
+            <div class="tune-inner">
+                <div class="pgroup"><div class="plabel" data-i18n="m.difficulty">Difficulty</div>
+                    <div class="pbtns" id="t-diff">
+                        <button class="pb" onclick="UI.setDiff('easy',this)" data-i18n="m.easy">Easy</button>
+                        <button class="pb on" onclick="UI.setDiff('medium',this)" data-i18n="m.medium">Medium</button>
+                        <button class="pb" onclick="UI.setDiff('hard',this)" data-i18n="m.hard">Hard</button>
+                    </div>
+                </div>
+                <div class="pgroup"><div class="plabel" data-i18n="m.duration">Duration</div>
+                    <div class="pbtns" id="t-time">
+                        <button class="pb" onclick="UI.setTime(30,this)">30s</button>
+                        <button class="pb on" onclick="UI.setTime(60,this)">60s</button>
+                        <button class="pb" onclick="UI.setTime(0,this)" data-i18n="m.endless">Endless</button>
+                    </div>
+                </div>
+
+                <div class="tune-adv-divider" data-i18n="m.advanced">Advanced</div>
+
+                <div class="pgroup"><div class="plabel" data-i18n="m.challenge">Challenge</div>
+                    <div class="pbtns" id="t-challenge">
+                        <button class="pb on" onclick="UI.setChallenge('normal',this)" data-i18n="m.normal">Normal</button>
+                        <button class="pb" onclick="UI.setChallenge('survival',this)" data-i18n="m.survival">Survival — 3 lives</button>
+                    </div>
+                    <div class="mono" style="font-size:9px;color:var(--t3);margin-top:6px;line-height:1.5" id="challenge-hint" data-i18n="vx.hint.normal">
+                        Normal: play for the set duration.
+                    </div>
+                </div>
+                <div class="pgroup"><div class="plabel" data-i18n="vx.keycount">Key set</div>
+                    <div class="pbtns" id="t-keys">
+                        <button class="pb" onclick="UI.setKeys(1,this)">1</button>
+                        <button class="pb" onclick="UI.setKeys(2,this)">2</button>
+                        <button class="pb on" onclick="UI.setKeys(4,this)">4</button>
+                    </div>
+                    <div class="mono" style="font-size:9px;color:var(--t3);margin-top:6px;line-height:1.5" data-i18n="vx.keyhint">
+                        How many different letters can appear. Fewer = easier to react.
+                    </div>
+                </div>
+                <div class="pgroup"><div class="plabel" data-i18n="vx.spawnlabel">Starting spawn rate</div>
+                    <div class="slider-row">
+                        <span class="mono" style="font-size:9px;color:var(--t3)" data-i18n="m.slow">Slow</span>
+                        <input type="range" id="sl-spawn" min="700" max="2200" value="1500" step="100" oninput="UI.updSpawn()">
+                        <span class="mono" style="font-size:9px;color:var(--t3)" data-i18n="m.fast">Fast</span>
+                        <span class="slider-val" id="sl-spawn-v">1.5s</span>
+                    </div>
+                    <div class="mono" style="font-size:9px;color:var(--t3);margin-top:6px;line-height:1.5" data-i18n="vx.spawnhint">
+                        Spawn rate quickens as you play — this is just the starting pace.
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <button class="gobtn" style="width:100%" onclick="Game.launch()" data-i18n="m.start">▶ START</button>
+        <button class="gobtn-back" onmouseenter="Snd.tick(660)" onclick="BM.backToHome()" data-i18n="m.back">← BACK TO MENU</button>
+    </div>
+    <div class="hint" data-i18n="vx.hint">Point the mouse at a wedge to arm its orbs, then press the orb's key to pop it.</div>
+</div>
+
+<!-- RESULTS -->
+<div class="res hide" id="res">
+    <div class="rcard">
+        <div class="hl" style="text-align:center;margin-bottom:10px" id="r-mode" data-i18n="m.complete">SESSION COMPLETE</div>
+        <div class="res-metric">
+            <span class="res-metric-value" id="r-primary">0</span><span class="res-metric-unit">%</span>
+            <div class="res-metric-label" data-i18n="vx.metric">Pop accuracy</div>
+        </div>
+        <div class="res-subduo">
+            <div class="res-subduo-item"><div class="res-subduo-v" id="r-pops" style="color:var(--accent)">0</div><div class="res-subduo-l" data-i18n="vx.pops">Orbs popped</div></div>
+            <div class="res-subduo-item"><div class="res-subduo-v" id="r-react" style="color:var(--track,#22d3ee)">0</div><div class="res-subduo-l" data-i18n="vx.avgreact">Avg reaction</div></div>
+        </div>
+        <div class="res-compare" id="r-compare"></div>
+        <div class="res-evo">
+            <div class="res-evo-title"><span data-i18n="m.recent">Recent sessions</span><span id="r-evo-best"></span></div>
+            <div class="res-evo-bars" id="r-evo-bars"></div>
+        </div>
+        <div class="res-details" id="r-details"></div>
+        <div class="rbtns">
+            <button class="rb-s" onclick="location.href='../index.html'" data-i18n="m.exit">EXIT</button>
+            <button class="rb-s" onclick="Game.toSetup()" data-i18n="m.menu">MENU</button>
+            <button class="rb-p" onclick="Game.retry()" data-i18n="m.retry">RETRY</button>
+        </div>
+    </div>
+</div>
+
+<script src="../assets/i18n.js"></script>
+<script src="../assets/shared.js"></script>
+<script src="../assets/history.js"></script>
+<script src="../assets/training-core.js"></script>
+<script src="../assets/routine.js"></script>
+<script src="../assets/experience.js"></script>
+<script>
+const MODULE='vortex';
+
+// ═══ Geometry ═══
+// The 4 wedges of the X-cut oval, by the screen direction they face.
+// angRange is the [min,max] angle (deg, atan2 convention: 0=right, 90=down)
+// that the mouse must point in for that wedge to be "lit". The oval is wider
+// than tall, so the wedge boundaries follow the corners of the SVG (the
+// diagonal cuts), giving left/right wedges a wider angular span than top/bottom.
+// We compute lit-wedge from the mouse angle relative to the diagonal of the
+// oval's bounding box rather than a flat 45°, so it matches the visual cut.
+const WEDGES = ['ne','se','sw','nw'];   // top, right, bottom, left (screen)
+
+// ═══ Oval geometry (SVG units == screen px, viewBox 300×200 at 300×200) ═══
+const OVAL = { rx:140, ry:90 };
+// Distance from center to the oval's edge along a wedge's travel axis.
+// Top/bottom wedges (ne/sw) travel vertically → edge at ry.
+// Left/right wedges (se/nw) travel horizontally → edge at rx.
+function edgeDist(wedge){
+    return (wedge==='ne'||wedge==='sw') ? OVAL.ry : OVAL.rx;
+}
+// Hard-mode target band straddles the oval edge — a generous strip running
+// from a bit inside the edge to a bit outside. Centered ON the edge so any
+// contact with the band counts. Returns [min,max].
+function zoneBand(wedge){
+    const edge = edgeDist(wedge);
+    const half = edge * 0.35;          // wide band: ±35% of the edge distance
+    return [edge - half, edge + half];
+}
+
+// ═══ Difficulty presets ═══
+const PRESETS = {
+    easy:   { keys:1, spawn:1700, speedMin:0.55, speedMax:0.75, zone:false, accelEvery:0, accelAmt:0 },
+    medium: { keys:2, spawn:1500, speedMin:0.7,  speedMax:1.05, zone:false, accelEvery:12000, accelAmt:90 },
+    hard:   { keys:4, spawn:1300, speedMin:0.9,  speedMax:1.7,  zone:true,  accelEvery:9000,  accelAmt:120 }
+};
+const KEY_POOL = ['Q','W','E','R'];   // left-hand home cluster — pairs with mouse on the right
+
+const UI = {
+    diff:'medium', time:60, challenge:'normal', keys:4, spawn:1500,
+
+    toggleTune(){
+        const p=document.getElementById('tune-panel'), t=document.getElementById('tune-toggle');
+        p.classList.toggle('open'); t.classList.toggle('open');
+        if(window.Snd) Snd.tick(698);
+    },
+    setDiff(k,btn){
+        this.diff=k; BM.selectPb(btn);
+        const p=PRESETS[k];
+        // Sync the dependent controls to the preset
+        this.keys=p.keys; this.spawn=p.spawn;
+        this.syncKeysBtns(); this.syncSpawn();
+        this.refreshSummary();
+    },
+    setTime(v,btn){ this.time=v; BM.selectPb(btn); this.refreshSummary(); },
+    setChallenge(c,btn){
+        this.challenge=c; BM.selectPb(btn);
+        document.getElementById('challenge-hint').textContent =
+            c==='survival' ? I18N.t('vx.hint.surv') : I18N.t('vx.hint.normal');
+        this.refreshSummary();
+    },
+    setKeys(n,btn){ this.keys=n; BM.selectPb(btn); this.refreshSummary(); },
+    syncKeysBtns(){
+        document.querySelectorAll('#t-keys .pb').forEach(b=>{
+            b.classList.toggle('on', parseInt(b.textContent)===this.keys);
+        });
+    },
+    updSpawn(){
+        this.spawn=parseInt(document.getElementById('sl-spawn').value);
+        document.getElementById('sl-spawn-v').textContent=(this.spawn/1000).toFixed(1)+'s';
+        this.refreshSummary();
+    },
+    syncSpawn(){
+        document.getElementById('sl-spawn').value=this.spawn;
+        document.getElementById('sl-spawn-v').textContent=(this.spawn/1000).toFixed(1)+'s';
+    },
+    refreshSummary(){
+        const diffLabel = this.diff ? I18N.t('m.'+this.diff) : I18N.t('m.custom').replace('…','');
+        const v=document.getElementById('qs-mode-value');
+        const s=document.getElementById('qs-mode-sub');
+        if(this.challenge==='survival'){
+            v.textContent=I18N.t('m.survival').split(' —')[0];
+            s.textContent=`${diffLabel} · ${this.keys} ${this.keys===1?I18N.t('vx.key'):I18N.t('vx.keysu')} · ${I18N.t('vx.lives3')}`;
+        } else {
+            v.textContent=this.time===0 ? I18N.t('m.endless') : this.time+(I18N.lang==='es'?' segundos':' seconds');
+            s.textContent=`${diffLabel} · ${this.keys} ${this.keys===1?I18N.t('vx.key'):I18N.t('vx.keysu')} · ${this.diff==='hard'?I18N.t('vx.zonemode'):I18N.t('vx.anywhere')}`;
+        }
+    }
+};
+
+// ═══ Geometry helper: which wedge does a screen point fall into? ═══
+// Relative to the oval center, the diagonal cuts go to the bounding-box
+// corners (rx, ry). A point's wedge is decided by comparing its angle to
+// those diagonals — top/bottom if |dy/ry| > |dx/rx|, else left/right.
+function wedgeForVector(dx, dy){
+    const rx=140, ry=90;
+    const nx=dx/rx, ny=dy/ry;     // normalize to the oval's aspect
+    if(Math.abs(ny) > Math.abs(nx)) return ny<0 ? 'ne' : 'sw';   // top : bottom
+    return nx>0 ? 'se' : 'nw';                                    // right : left
+}
+
+const Game = {
+    active:false, paused:false, mode:'', lastMode:'',
+    score:0, pops:0, misses:0, expired:0, streak:0, maxStreak:0,
+    lives:3, maxLives:3, reactionTimes:[],
+    orbs:[], spawnTimer:null, tickTimer:null, rafId:null,
+    curSpawn:1500, elapsed:0, startTime:0, lastAccel:0,
+    cx:0, cy:0, mouseWedge:null,
+    cfg:null, keyPool:[], timeLeft:60,
+
+    launch(){
+        Snd.init();
+        this.cfg = Object.assign({}, PRESETS[UI.diff], { keys:UI.keys, spawn:UI.spawn });
+        this.mode = UI.challenge;
+        this.lastMode = UI.challenge;
+        this.keyPool = KEY_POOL.slice(0, this.cfg.keys);
+        this.start();
+    },
+
+    start(){
+        // Reset state
+        this.active=true; this.paused=false;
+        this.score=0; this.pops=0; this.misses=0; this.expired=0;
+        this.streak=0; this.maxStreak=0; this.reactionTimes=[];
+        this.orbs.forEach(o=>o.el.remove()); this.orbs=[];
+        this.lives=this.maxLives;
+        this.curSpawn=this.cfg.spawn;
+        this.elapsed=0; this.lastAccel=0;
+        this.timeLeft = UI.time;
+
+        // Screen geometry
+        this.cx = window.innerWidth/2;
+        this.cy = window.innerHeight/2;
+
+        // UI swap
+        document.getElementById('setup').classList.remove('on');
+        document.getElementById('setup').style.display='none';
+        document.getElementById('res').classList.add('hide');
+        document.getElementById('hud').classList.add('on');
+        document.getElementById('stwrap').classList.add('on');
+        document.getElementById('status').classList.add('on');
+        document.getElementById('keys-hint').classList.add('on');
+
+        // Reveal the floating pause / module-switch button (hidden by default)
+        if(this.qs && this.qs.btn) this.qs.btn.classList.add('on');
+
+        // Build the key hint row
+        const kh=document.getElementById('keys-hint'); kh.innerHTML='';
+        this.keyPool.forEach(k=>{
+            const d=document.createElement('div'); d.className='key-hint'; d.textContent=k; kh.appendChild(d);
+        });
+
+        // Zone ring (hard only)
+        document.getElementById('zone-ring').style.display = this.cfg.zone ? 'block' : 'none';
+
+        // HUD
+        document.getElementById('h-sc').textContent='0';
+        document.getElementById('h-ac').textContent='100%';
+        document.getElementById('h-tm').textContent = UI.time===0 ? '∞' : UI.time;
+        BM.drawLives('#h-lives', this.lives, this.maxLives, 'sm');
+        document.getElementById('h-lives').style.display = this.mode==='survival' ? '' : 'none';
+        BM.buildPips('#stbar', 30);
+        BM.updatePips('#stbar', 0, '#stval');
+
+        this.startTime = this.clock.now();
+        this.scheduleSpawn();
+        this.tickTimer = this.scheduler.setInterval(()=>this.tick(), 200);
+        this._boundRender = ()=>this.render();
+        this.rafId = this.scheduler.requestAnimationFrame(this._boundRender);
+    },
+
+    scheduleSpawn(){
+        if(!this.active) return;
+        this.scheduler.clear(this.spawnTimer);
+        this.spawnTimer = this.scheduler.setTimeout(()=>{
+            if(this.active && !this.paused) this.spawn();
+            this.scheduleSpawn();
+        }, this.curSpawn);
+    },
+
+    spawn(){
+        // Pick a wedge and a key
+        const wedge = WEDGES[Math.floor(Math.random()*4)];
+        const key = this.keyPool[Math.floor(Math.random()*this.keyPool.length)];
+        const speed = this.cfg.speedMin + Math.random()*(this.cfg.speedMax-this.cfg.speedMin);
+
+        // Spawn point: just outside the oval edge along the wedge's center
+        // direction. dir is the unit-ish vector pointing OUTWARD for the wedge.
+        const dirs = {
+            ne:{x:0,y:-1}, se:{x:1,y:0}, sw:{x:0,y:1}, nw:{x:-1,y:0}
+        };
+        const d = dirs[wedge];
+        const startDist = 230;   // px from center to spawn
+        const ox = this.cx + d.x*startDist*1.4;   // wider horizontally (oval)
+        const oy = this.cy + d.y*startDist;
+
+        const el = document.createElement('div');
+        el.className='orb';
+        el.innerHTML=`<div class="orb-body">${key}</div>`;
+        el.style.left=ox+'px'; el.style.top=oy+'px';
+        document.getElementById('arena').appendChild(el);
+
+        this.orbs.push({
+            el, wedge, key, x:ox, y:oy,
+            dx:-d.x*speed, dy:-d.y*speed,   // travel toward center
+            speed, born:this.clock.now(), armed:false, dist:startDist
+        });
+        Snd.appear();
+    },
+
+    render(){
+        if(!this.active){ this.rafId=null; return; }
+        if(!this.paused){
+            const now = this.clock.now();
+            // Recompute which wedge the mouse points at
+            const ndx = this._mx - this.cx, ndy = this._my - this.cy;
+            const mw = (Math.abs(ndx)<8 && Math.abs(ndy)<8) ? null : wedgeForVector(ndx, ndy);
+            if(mw !== this.mouseWedge){ this.mouseWedge = mw; this.updateWedgeLights(); }
+
+            // Move orbs toward center; arm them if mouse points at their wedge
+            const speedScale = 60/1000;   // px per ms baseline → per frame approx
+            for(let i=this.orbs.length-1;i>=0;i--){
+                const o=this.orbs[i];
+                // Move (frame-rate independent enough at 60fps; scaled by ms delta)
+                const dt = Math.min(40, now - (o._last||now)); o._last=now;
+                const px = o.dx * dt/16.67, py = o.dy * dt/16.67;
+                o.x += px; o.y += py;
+                o.el.style.left=o.x+'px'; o.el.style.top=o.y+'px';
+
+                // Distance from center
+                const ddx=o.x-this.cx, ddy=o.y-this.cy;
+                const dist=Math.hypot(ddx,ddy);
+
+                // Armed = mouse points at this orb's wedge
+                const armed = (this.mouseWedge===o.wedge);
+                if(armed!==o.armed){ o.armed=armed; o.el.classList.toggle('armed', armed); }
+
+                // In-zone glow (hard mode): within the target band near center
+                // In-zone glow (hard mode): within the target band just
+                // outside the oval edge — this is where you must pop.
+                if(this.cfg.zone){
+                    const [zmin,zmax] = zoneBand(o.wedge);
+                    const inzone = dist <= zmax && dist >= zmin;
+                    o.el.classList.toggle('inzone', inzone && armed);
+                }
+
+                // Resolve the orb the moment it can no longer be popped.
+                // Hard mode: the poppable window is the band straddling the
+                // oval edge — once the orb passes the band's INNER edge moving
+                // inward, it's unreachable, so it expires right there (no dead
+                // ghost drifting to the core). Easy/medium: poppable until the
+                // core, so expire near center.
+                if(this.cfg.zone){
+                    const [zmin] = zoneBand(o.wedge);
+                    if(dist < zmin){ this.expireOrb(i); }
+                } else if(dist < 16 || this._overshot(o, ddx, ddy)){
+                    this.expireOrb(i);
+                }
+            }
+        }
+        this.rafId = this.scheduler.requestAnimationFrame(this._boundRender);
+    },
+
+    // An orb overshoots if it has crossed the center and is moving away again
+    _overshot(o, ddx, ddy){
+        // dot product of position-from-center and velocity > 0 means moving away
+        return (ddx*o.dx + ddy*o.dy) > 0 && Math.hypot(ddx,ddy) > 24;
+    },
+
+    updateWedgeLights(){
+        WEDGES.forEach(w=>{
+            document.getElementById('w-'+w).classList.toggle('lit', w===this.mouseWedge);
+        });
+        const pill=document.getElementById('status-pill');
+        if(this.mouseWedge){
+            pill.classList.add('locked');
+            pill.textContent=I18N.t('vx.aimed');
+        }else{
+            pill.classList.remove('locked');
+            pill.textContent=I18N.t('vx.aimlost');
+        }
+        // Aim line
+        const line=document.getElementById('aim-line');
+        if(this.mouseWedge){
+            const ang=Math.atan2(this._my-this.cy, this._mx-this.cx);
+            const len=Math.min(180, Math.hypot(this._mx-this.cx, this._my-this.cy));
+            line.style.width=len+'px';
+            line.style.transform=`rotate(${ang}rad)`;
+            line.classList.add('on');
+        }else{
+            line.classList.remove('on');
+        }
+    },
+
+    onKey(e){
+        if(e.repeat)return;
+        if(!this.active || this.paused) return;
+        const k=e.key.toUpperCase();
+        if(!this.keyPool.includes(k)) return;
+        e.preventDefault();
+
+        // GATE: the mouse must point at a wedge. If not, nothing happens (a miss
+        // of intent — we count it as a wrong action only if there was a valid
+        // target somewhere, to avoid punishing idle taps too harshly).
+        if(!this.mouseWedge){
+            this.flashWrong();
+            return;
+        }
+
+        // Find an orb in the pointed wedge whose key matches, closest to center.
+        let best=-1, bestDist=1e9;
+        for(let i=0;i<this.orbs.length;i++){
+            const o=this.orbs[i];
+            if(o.wedge!==this.mouseWedge || o.key!==k) continue;
+            const dist=Math.hypot(o.x-this.cx, o.y-this.cy);
+            // Hard mode: only poppable inside the target band just outside the oval
+            if(this.cfg.zone){
+                const [zmin,zmax] = zoneBand(o.wedge);
+                if(!(dist<=zmax && dist>=zmin)) continue;
+            }
+            if(dist<bestDist){ bestDist=dist; best=i; }
+        }
+
+        if(best<0){ this.miss(); return; }
+        this.pop(best, bestDist);
+    },
+
+    pop(i, dist){
+        const o=this.orbs[i];
+        // Perfect = popped near the dead center of the target band
+        let perfect=false;
+        if(this.cfg.zone){
+            const [zmin,zmax] = zoneBand(o.wedge);
+            const mid=(zmin+zmax)/2, tol=(zmax-zmin)*0.3;
+            perfect = Math.abs(dist-mid) <= tol;
+        }
+        // Reaction time = lifespan of the orb
+        this.reactionTimes.push(Math.round(this.clock.now()-o.born));
+
+        // Burst FX
+        this.burst(o.x, o.y, perfect);
+        this.spawnShards(o.x, o.y, perfect);
+        o.el.remove();
+        this.orbs.splice(i,1);
+
+        this.pops++;
+        this.streak++;
+        if(this.streak>this.maxStreak) this.maxStreak=this.streak;
+        const base = perfect ? 150 : 100;
+        const streakBonus = Math.min(this.streak*5, 100);
+        this.score += base + streakBonus;
+
+        document.getElementById('h-sc').textContent=this.score;
+        BM.updatePips('#stbar', this.streak, '#stval');
+        this.updateAccuracy();
+        perfect ? Snd.hit() : Snd.hit();
+
+        // Survival: recover a life every 25 pops
+        if(this.mode==='survival' && this.pops>0 && this.pops%25===0 && this.lives<this.maxLives){
+            this.lives++; BM.drawLives('#h-lives', this.lives, this.maxLives, 'sm');
+        }
+    },
+
+    miss(){
+        // Wrong key / wrong timing while aiming at a wedge
+        this.misses++; this.streak=0;
+        BM.updatePips('#stbar', 0, '#stval');
+        Snd.miss();
+        this.missX(this._mx, this._my);
+        this.updateAccuracy();
+        if(this.mode==='survival') this.loseLife();
+    },
+
+    flashWrong(){
+        // Tapped a key with no aim — light feedback, light penalty
+        this.streak=0; BM.updatePips('#stbar', 0, '#stval');
+        Snd.miss();
+    },
+
+    expireOrb(i){
+        const o=this.orbs[i];
+        this.missX(o.x, o.y);
+        // Implode toward the core — reads as "it slipped into the vortex"
+        o.el.animate([
+            {transform:'translate(-50%,-50%) scale(1)',   opacity:1},
+            {transform:'translate(-50%,-50%) scale(.2)',  opacity:0}
+        ], {duration:200, easing:'cubic-bezier(.5,0,.9,.4)'});
+        const el=o.el; this.scheduler.setTimeout(()=>el.remove(),200);
+        this.orbs.splice(i,1);
+        this.expired++;
+        this.streak=0; BM.updatePips('#stbar', 0, '#stval');
+        Snd.miss();
+        this.updateAccuracy();
+        if(this.mode==='survival') this.loseLife();
+    },
+
+    loseLife(){
+        this.lives--;
+        BM.drawLives('#h-lives', this.lives, this.maxLives, 'sm');
+        if(this.lives<=0) this.end(true);
+    },
+
+    updateAccuracy(){
+        const total=this.pops+this.misses+this.expired;
+        const acc=total>0 ? Math.round(this.pops/total*100) : 100;
+        document.getElementById('h-ac').textContent=acc+'%';
+    },
+
+    burst(x,y,perfect){
+        const b=document.createElement('div');
+        b.className='burst'+(perfect?' perfect':'');
+        b.style.left=x+'px'; b.style.top=y+'px';
+        document.getElementById('arena').appendChild(b);
+        this.scheduler.setTimeout(()=>b.remove(),440);
+    },
+    spawnShards(x,y,perfect){
+        const n=perfect?10:6;
+        for(let j=0;j<n;j++){
+            const s=document.createElement('div'); s.className='shard';
+            if(perfect) s.style.background='var(--zone)';
+            s.style.left=x+'px'; s.style.top=y+'px';
+            const ang=(j/n)*Math.PI*2, d=24+Math.random()*22;
+            s.style.transform=`translate(-50%,-50%)`;
+            document.getElementById('arena').appendChild(s);
+            // animate via WAAPI for the fly-out
+            s.animate([
+                {transform:`translate(-50%,-50%) translate(0,0)`, opacity:1},
+                {transform:`translate(-50%,-50%) translate(${Math.cos(ang)*d}px,${Math.sin(ang)*d}px)`, opacity:0}
+            ], {duration:420, easing:'ease-out'});
+            this.scheduler.setTimeout(()=>s.remove(),440);
+        }
+    },
+    missX(x,y){
+        const m=document.createElement('div'); m.className='miss-x'; m.textContent='✕';
+        m.style.left=x+'px'; m.style.top=y+'px';
+        document.getElementById('arena').appendChild(m);
+        this.scheduler.setTimeout(()=>m.remove(),440);
+    },
+
+    tick(){
+        if(!this.active || this.paused) return;
+        this.elapsed = this.clock.now()-this.startTime;
+
+        // Countdown
+        if(UI.time>0){
+            const left=Math.max(0, UI.time - Math.floor(this.elapsed/1000));
+            this.timeLeft=left;
+            document.getElementById('h-tm').textContent=left;
+            if(left<=0){ this.end(false); return; }
+        }
+
+        // Spawn-rate acceleration
+        if(this.cfg.accelEvery>0 && this.elapsed - this.lastAccel >= this.cfg.accelEvery){
+            this.lastAccel=this.elapsed;
+            this.curSpawn=Math.max(450, this.curSpawn - this.cfg.accelAmt);
+        }
+    },
+
+    pause(){
+        if(!this.active) return;
+        this.paused=true;
+        document.getElementById('status-pill').textContent=I18N.t('time.st.paused');
+    },
+    resume(){
+        if(!this.active) return;
+        this.paused=false;
+        // reset orb _last so they don't jump
+        const now=this.clock.now();
+        this.orbs.forEach(o=>o._last=now);
+        this.updateWedgeLights();
+    },
+    exit(){ this.cleanup(); },
+
+    cleanup(){
+        this.active=false;
+        this.scheduler.clear(this.spawnTimer);
+        this.scheduler.clear(this.tickTimer);
+        if(this.rafId){ this.scheduler.clear(this.rafId); this.rafId=null; }
+        this.orbs.forEach(o=>o.el.remove()); this.orbs=[];
+        WEDGES.forEach(w=>document.getElementById('w-'+w).classList.remove('lit'));
+        document.getElementById('aim-line').classList.remove('on');
+    },
+
+    end(early){
+        this.cleanup();
+        document.getElementById('hud').classList.remove('on');
+        document.getElementById('stwrap').classList.remove('on');
+        document.getElementById('status').classList.remove('on');
+        document.getElementById('keys-hint').classList.remove('on');
+        if(this.qs && this.qs.btn) this.qs.btn.classList.remove('on');
+        this.showResults(early);
+    },
+
+    toSetup(){
+        document.getElementById('res').classList.add('hide');
+        document.getElementById('setup').style.display='';
+        document.getElementById('setup').classList.add('on');
+    },
+    retry(){
+        document.getElementById('res').classList.add('hide');
+        this.launch();
+    },
+
+    showResults(early){
+        const total=this.pops+this.misses+this.expired;
+        const acc = total>0 ? Math.round(this.pops/total*100) : 0;
+        const avgRt = this.reactionTimes.length>0
+            ? Math.round(this.reactionTimes.reduce((a,b)=>a+b,0)/this.reactionTimes.length) : 0;
+
+        document.getElementById('r-mode').textContent =
+            (this.mode==='survival' ? I18N.t('vx.survover') : I18N.t('m.complete'));
+        document.getElementById('r-primary').textContent=acc;
+        document.getElementById('r-pops').textContent=this.pops;
+        document.getElementById('r-react').textContent=avgRt+'ms';
+
+        // Primary metric = pop accuracy. Bucket by difficulty for fair comparison.
+        // Prefix matches the pattern used by pathpredict/attention/etc — the
+        // index card chip scans by prefix to find the best across difficulties.
+        const bestKey = 'acc_' + (this.mode==='survival' ? 'surv' : UI.diff);
+        const priorBest = Store.getBest(MODULE, bestKey);
+        Store.saveSession(MODULE,{metric:acc,bucket:bestKey,pops:this.pops,misses:this.misses,expired:this.expired,avgRt,score:this.score});
+        const cmpEl=document.getElementById('r-compare');
+        const bucketName = this.mode==='survival'
+            ? (I18N.lang==='es'?'supervivencia':'survival')
+            : I18N.t('m.'+UI.diff).toLowerCase();
+
+        if(total===0){
+            cmpEl.className='res-compare worse';
+            cmpEl.innerHTML='<span class="ar">—</span> '+I18N.t('vx.nopops');
+        } else {
+            if(priorBest==null){
+                cmpEl.className='res-compare record';
+                cmpEl.innerHTML='<span class="ar">★</span> '+(I18N.lang==='es'
+                    ? 'Primera sesión '+bucketName+' — tu base'
+                    : 'First '+bucketName+' session — your baseline');
+            } else if(acc>priorBest){
+                cmpEl.className='res-compare record';
+                cmpEl.innerHTML=`<span class="ar">▲</span> ${I18N.t('m.res.newbest')} · +${acc-priorBest}% ${I18N.t('vx.over')}`;
+            } else if(acc===priorBest){
+                cmpEl.className='res-compare better';
+                cmpEl.innerHTML=`<span class="ar">=</span> ${I18N.t('m.res.matched')} (${priorBest}%)`;
+            } else {
+                cmpEl.className='res-compare worse';
+                cmpEl.innerHTML=`<span class="ar">▾</span> ${priorBest-acc}% ${I18N.t('vx.below')} (${priorBest}%)`;
+            }
+            Store.saveBest(MODULE, bestKey, acc, true);
+            Store.saveBest(MODULE, 'score', this.score, true);   // global best for the index card chip
+            
+        }
+
+        this.renderEvolution(bestKey, acc);
+
+        document.getElementById('r-details').innerHTML =
+            `<span>${I18N.t('vx.d.score')} <b>${this.score}</b></span>` +
+            `<span>${I18N.t('vx.d.missed')} <b>${this.misses+this.expired}</b></span>` +
+            `<span>${I18N.t('vx.d.beststreak')} <b>${this.maxStreak}</b></span>`;
+
+        document.getElementById('res').classList.remove('hide');
+    },
+
+    renderEvolution(bucket, current){
+        const bars=document.getElementById('r-evo-bars');
+        const bestSpan=document.getElementById('r-evo-best');
+        const sessions=(Store.getSessions(MODULE)||[]).filter(s=>s.bucket===bucket).slice(-12);
+        bars.innerHTML='';
+        if(sessions.length<=1){
+            bars.innerHTML=`<div class="res-evo-empty">${I18N.t('vx.evoempty')}</div>`;
+            bestSpan.textContent='';
+            return;
+        }
+        const max=Math.max(...sessions.map(s=>s.metric), current, 1);
+        bestSpan.textContent=I18N.t('m.res.best')+' '+max+'%';
+        sessions.forEach((s,idx)=>{
+            const bar=document.createElement('div');
+            bar.className='res-evo-bar'+(idx===sessions.length-1?' latest':'');
+            bar.style.height=(s.metric/max*100)+'%';
+            bars.appendChild(bar);
+        });
+    }
+};
+
+// ═══ Input wiring ═══
+document.addEventListener('mousemove', e=>{
+    Game._mx=e.clientX; Game._my=e.clientY;
+});
+Game._mx=window.innerWidth/2; Game._my=window.innerHeight/2;
+document.addEventListener('keydown', e=>Game.onKey(e));
+
+// ═══ INIT ═══
+if(!Snd.on) document.getElementById('snd-btn').textContent='♪ OFF';
+UI.setDiff('medium', document.querySelector('#t-diff .pb.on'));
+UI.refreshSummary();
+
+// Re-render dynamic text on language change (static data-i18n auto-updates)
+window.addEventListener('langchange', ()=>{
+    UI.refreshSummary();
+    UI.setChallenge(UI.challenge, document.querySelector('#t-challenge .pb.on'));
+    if(Game.active) Game.updateWedgeLights();
+});
+
+// Quick switcher — pause + module nav
+BM.attachTraining({module:MODULE,game:Game,ui:UI,start:'launch',finish:'end'});
+Game.qs = BM.mountQuickSwitcher({
+    current: MODULE,
+    onPause:  () => Game.pause(),
+    onResume: () => Game.resume(),
+    onExit:   () => Game.exit()
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,503 @@
+/* ═══════════════════════════════════════════════════════════
+   BuffMechanics · shared.css
+   Common design tokens, resets, and UI patterns for all modules.
+   Each module may override --accent / --accent-dim and add its own
+   specific styles. Keep module-specific CSS in the module file.
+   ═══════════════════════════════════════════════════════════ */
+
+/* ── 1 · Design tokens ─────────────────────────────────────── */
+:root{
+    /* Base palette */
+    --bg:#060608;
+    --sf:#0c0c10;
+    --sf2:#101016;
+    --bd:#1a1a22;
+    --bdl:#2a2a38;
+
+    /* Text — calibrated for comfortable reading on the near-black bg.
+       --t1 primary (near-white), --t2 secondary (clearly legible mid-grey),
+       --t2-5 a brighter secondary for body copy that deserves more presence,
+       --t3 tertiary (tenue but never invisible — labels, codes, hints). */
+    --t1:#edeef2;
+    --t2:#9a9ab0;
+    --t2-5:#b8b8c8;
+    --t3:#6b6b82;
+
+    /* Semantic */
+    --hit:#00ff88;
+    --miss:#ff2255;
+    --warn:#fbbf24;
+
+    /* Category accents (used by index) */
+    --mech:#ef4444;
+    --mech-dim:rgba(239,68,68,.08);
+    --cog:#3b82f6;
+    --cog-dim:rgba(59,130,246,.08);
+
+    /* Default module accent — each module overrides these */
+    --accent:#00e5ff;
+    --accent-dim:rgba(0,229,255,.12);
+}
+
+/* ── 2 · Reset & base ──────────────────────────────────────── */
+*{margin:0;padding:0;box-sizing:border-box}
+body{
+    background:var(--bg);
+    color:var(--t1);
+    font-family:'Rajdhani',sans-serif;
+    min-height:100vh;
+    user-select:none;
+}
+.mono{font-family:'Space Mono',monospace}
+
+/* Reduced motion — respect user preference */
+@media (prefers-reduced-motion: reduce){
+    *,*::before,*::after{
+        animation-duration:.01ms !important;
+        animation-iteration-count:1 !important;
+        transition-duration:.01ms !important;
+    }
+}
+
+/* ── 3 · Arena grid background utility ─────────────────────── */
+.arena-grid{
+    background-image:linear-gradient(rgba(255,255,255,.015) 1px,transparent 1px),
+                     linear-gradient(90deg,rgba(255,255,255,.015) 1px,transparent 1px);
+    background-size:60px 60px;
+}
+
+/* ── 4 · HUD ───────────────────────────────────────────────── */
+.hud{
+    position:fixed;top:0;left:0;right:0;height:52px;
+    display:flex;align-items:center;justify-content:space-between;
+    padding:0 20px;
+    background:linear-gradient(180deg,rgba(6,6,8,.96) 60%,transparent);
+    z-index:100;pointer-events:none;
+    opacity:0;transition:opacity .3s;
+}
+.hud.on{opacity:1}
+.hb{display:flex;flex-direction:column;gap:1px}
+.hb.c{align-items:center}
+.hb.r{align-items:flex-end}
+.hl{
+    font-family:'Space Mono',monospace;
+    font-size:8px;font-weight:700;
+    letter-spacing:.14em;text-transform:uppercase;
+    color:var(--t2);
+}
+.hv{font-size:24px;font-weight:700;line-height:1;letter-spacing:-.5px}
+
+/* Timer pill */
+.tpill{
+    background:var(--sf);border:1px solid var(--bd);border-radius:16px;
+    padding:3px 16px;display:flex;align-items:center;gap:6px;
+}
+.tdot{
+    width:5px;height:5px;border-radius:50%;background:var(--accent);
+    animation:bm-pulse 1s infinite;
+}
+@keyframes bm-pulse{0%,100%{opacity:1}50%{opacity:.3}}
+
+/* Lives (hearts) */
+.lives{display:flex;gap:4px;align-items:center}
+.heart{width:14px;height:14px;position:relative}
+.heart::before,.heart::after{
+    content:'';position:absolute;width:7px;height:11px;
+    border-radius:7px 7px 0 0;background:var(--miss);
+}
+.heart::before{left:0;top:0;transform:rotate(-45deg);transform-origin:bottom right}
+.heart::after{left:5px;top:0;transform:rotate(45deg);transform-origin:bottom left}
+.heart.dead::before,.heart.dead::after{background:var(--t3)}
+
+/* Compact lives variant (used by APM) */
+.heart.sm{width:12px;height:12px}
+.heart.sm::before,.heart.sm::after{width:6px;height:10px;border-radius:6px 6px 0 0}
+.heart.sm::after{left:4.5px}
+
+/* ── 5 · Streak bar ────────────────────────────────────────── */
+.streak-wrap{
+    position:fixed;bottom:16px;left:50%;transform:translateX(-50%);
+    display:flex;align-items:center;gap:10px;z-index:100;
+    pointer-events:none;opacity:0;transition:opacity .3s;
+}
+.streak-wrap.on{opacity:1}
+.spips{display:flex;gap:2px}
+.spip{
+    width:2.5px;height:12px;background:var(--t3);border-radius:1px;
+    transition:all .12s;
+}
+.spip.a{background:var(--accent);box-shadow:0 0 5px var(--accent);height:18px}
+.spip.f{background:var(--warn);box-shadow:0 0 6px var(--warn);height:22px}
+.slbl{
+    font-family:'Space Mono',monospace;
+    font-size:10px;font-weight:700;color:var(--t2);min-width:32px;
+}
+
+/* ── 6 · Crosshair ─────────────────────────────────────────── */
+.xhair{
+    position:fixed;pointer-events:none;z-index:999;
+    transform:translate(-50%,-50%);display:none;
+}
+.xhair::before,.xhair::after{
+    content:'';position:absolute;background:var(--accent);opacity:.9;
+}
+.xhair::before{width:18px;height:1.5px;top:50%;left:50%;transform:translate(-50%,-50%)}
+.xhair::after{width:1.5px;height:18px;top:50%;left:50%;transform:translate(-50%,-50%)}
+.xhair-dot{
+    width:3px;height:3px;background:#fff;border-radius:50%;
+    position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+}
+
+/* ── 7 · Setup screen ──────────────────────────────────────── */
+.setup{
+    position:fixed;inset:0;background:var(--bg);z-index:200;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;
+    overflow-y:auto;padding:24px;gap:4px;
+}
+.setup.hide{display:none}
+
+.setup-logo{
+    font-family:'Space Mono',monospace;
+    font-size:10px;font-weight:700;color:var(--accent);letter-spacing:.15em;
+    border:2px solid var(--accent);padding:6px 14px;margin-bottom:20px;
+}
+.stitle{font-size:42px;font-weight:700;letter-spacing:-1px;text-align:center;line-height:1}
+.stitle em{color:var(--accent);font-style:normal}
+.ssub{
+    font-family:'Space Mono',monospace;
+    font-size:10px;color:var(--t2);letter-spacing:.2em;text-transform:uppercase;
+    text-align:center;margin-top:6px;
+}
+
+/* Tabs */
+.tabs{display:flex;gap:0;margin:28px 0 20px;border:1px solid var(--bd)}
+.tab{
+    padding:8px 24px;font-family:'Rajdhani',sans-serif;
+    font-size:12px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;
+    cursor:pointer;color:var(--t2);background:transparent;border:none;
+    transition:all .2s;
+}
+.tab:hover{color:var(--t1)}
+.tab.on{color:var(--accent);background:var(--accent-dim)}
+
+/* Panels */
+.panel{display:none;width:100%;max-width:520px}
+.panel.on{display:block}
+
+/* Panel groups */
+.pgroup{margin-bottom:16px}
+.plabel{
+    font-family:'Space Mono',monospace;
+    font-size:9px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;
+    color:var(--t2);margin-bottom:6px;
+}
+.pbtn-row{display:flex;gap:6px;flex-wrap:wrap}
+.pb{
+    background:var(--sf);border:1px solid var(--bd);color:var(--t2);
+    padding:7px 16px;font-family:'Rajdhani',sans-serif;
+    font-size:13px;font-weight:700;cursor:pointer;letter-spacing:.04em;
+    transition:all .15s;
+}
+.pb:hover{border-color:var(--t2);color:var(--t1)}
+.pb.on{border-color:var(--accent);color:var(--accent);background:var(--accent-dim)}
+
+/* Checkbox style */
+.pcheck{
+    display:flex;align-items:center;gap:8px;cursor:pointer;
+    padding:6px 12px;background:var(--sf);border:1px solid var(--bd);
+    transition:all .15s;margin-bottom:4px;
+}
+.pcheck:hover{border-color:var(--bdl)}
+.pcheck.on{border-color:var(--accent);background:var(--accent-dim)}
+.pcheck .box{
+    width:14px;height:14px;border:1.5px solid var(--t2);
+    display:flex;align-items:center;justify-content:center;
+    font-size:10px;color:var(--accent);transition:all .15s;
+}
+.pcheck.on .box{border-color:var(--accent)}
+.pcheck span{font-size:12px;font-weight:600;color:var(--t2);letter-spacing:.03em}
+.pcheck.on span{color:var(--t1)}
+.pcheck-desc{
+    font-family:'Space Mono',monospace;
+    font-size:9px;color:var(--t3);margin:-2px 0 8px 0;padding-left:12px;
+}
+
+/* Slider */
+.slider-wrap{display:flex;align-items:center;gap:12px}
+.slider-val{
+    font-family:'Space Mono',monospace;
+    font-size:13px;font-weight:700;color:var(--accent);
+    min-width:42px;text-align:center;
+}
+input[type=range]{
+    -webkit-appearance:none;appearance:none;
+    width:100%;height:3px;background:var(--bd);outline:none;border-radius:2px;
+}
+input[type=range]::-webkit-slider-thumb{
+    -webkit-appearance:none;appearance:none;
+    width:14px;height:14px;background:var(--accent);border-radius:50%;cursor:pointer;
+}
+input[type=range]::-moz-range-thumb{
+    width:14px;height:14px;background:var(--accent);border-radius:50%;cursor:pointer;border:none;
+}
+
+/* Start button */
+.gobtn{
+    width:100%;max-width:520px;padding:14px;
+    background:var(--accent);border:none;color:var(--bg);
+    font-family:'Rajdhani',sans-serif;
+    font-size:16px;font-weight:700;letter-spacing:.2em;cursor:pointer;
+    transition:all .2s;margin-top:8px;
+}
+.gobtn:hover{background:#fff;box-shadow:0 0 24px var(--accent-dim)}
+.gobtn.alt{background:var(--miss)}
+.gobtn.alt:hover{background:#fff;color:var(--miss)}
+
+/* Secondary "back to menu" button — sits below each .gobtn in setup screens.
+   Visually subordinate: transparent, lower-key, but full-width so the
+   vertical rhythm of the column is preserved. */
+.gobtn-back{
+    width:100%;max-width:520px;padding:9px;
+    background:transparent;border:1px solid var(--bd);
+    color:var(--t2);
+    font-family:'Rajdhani',sans-serif;
+    font-size:12px;font-weight:700;letter-spacing:.16em;
+    cursor:pointer;transition:all .2s;
+    margin-top:6px;
+}
+.gobtn-back:hover{border-color:var(--t2);color:var(--t1)}
+
+.hint{
+    font-family:'Space Mono',monospace;
+    font-size:9px;color:var(--t3);margin-top:12px;text-align:center;
+}
+
+/* Sound toggle */
+.snd-toggle{
+    position:absolute;top:16px;right:16px;
+    background:none;border:1px solid var(--bd);color:var(--t2);
+    font-family:'Space Mono',monospace;
+    font-size:9px;padding:4px 10px;cursor:pointer;letter-spacing:.1em;z-index:201;
+}
+.snd-toggle:hover{color:var(--t1);border-color:var(--t2)}
+
+/* ── 8 · Results screen ────────────────────────────────────── */
+.res{
+    position:fixed;inset:0;background:rgba(6,6,8,.96);backdrop-filter:blur(6px);
+    z-index:200;display:flex;align-items:center;justify-content:center;
+}
+.res.hide{display:none}
+.rcard{
+    background:var(--sf);border:1px solid var(--bd);
+    padding:36px;width:100%;max-width:440px;
+}
+.rgrid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:20px 0}
+.rcell{background:var(--bg);border:1px solid var(--bd);padding:14px;text-align:center}
+.rcell .rv{font-size:28px;font-weight:700;line-height:1.1}
+.rcell .rl{
+    font-family:'Space Mono',monospace;
+    font-size:8px;color:var(--t2);letter-spacing:.12em;text-transform:uppercase;margin-top:3px;
+}
+.rbtns{display:flex;gap:6px;margin-top:20px}
+.rbtns button{
+    flex:1;padding:11px;font-family:'Rajdhani',sans-serif;
+    font-size:13px;font-weight:700;letter-spacing:.1em;
+    cursor:pointer;border:1px solid var(--bd);transition:all .2s;
+}
+.rb-s{background:transparent;color:var(--t2)}
+.rb-s:hover{border-color:var(--t2);color:var(--t1)}
+.rb-m{background:transparent;color:var(--t2);border-color:var(--accent)}
+.rb-m:hover{background:var(--accent-dim);color:var(--accent)}
+.rb-p{background:var(--accent);color:var(--bg);border-color:var(--accent)}
+.rb-p:hover{background:#fff;border-color:#fff}
+
+/* New-best badge */
+.new-best{
+    display:inline-block;margin-left:8px;padding:2px 8px;
+    background:var(--warn);color:var(--bg);
+    font-family:'Space Mono',monospace;
+    font-size:8px;font-weight:700;letter-spacing:.1em;
+    animation:bm-nb 1.6s ease infinite;
+}
+@keyframes bm-nb{0%,100%{opacity:1}50%{opacity:.5}}
+
+/* ── 9 · Common fx ─────────────────────────────────────────── */
+.fx-hit{
+    position:absolute;border-radius:50%;transform:translate(-50%,-50%);
+    pointer-events:none;z-index:30;border:2px solid var(--hit);
+    animation:bm-burst .25s ease-out forwards;
+}
+@keyframes bm-burst{
+    0%{width:8px;height:8px;opacity:1}
+    100%{width:50px;height:50px;opacity:0}
+}
+.fx-score{
+    position:absolute;transform:translate(-50%,-50%);pointer-events:none;z-index:30;
+    font-family:'Space Mono',monospace;font-size:12px;font-weight:700;color:var(--hit);
+    animation:bm-scoreup .5s ease-out forwards;
+}
+@keyframes bm-scoreup{
+    0%{opacity:1;transform:translate(-50%,-50%)}
+    100%{opacity:0;transform:translate(-50%,-120%)}
+}
+.fx-miss{
+    position:absolute;transform:translate(-50%,-50%);pointer-events:none;z-index:30;
+    font-size:16px;color:var(--miss);animation:bm-mfade .35s ease-out forwards;
+}
+@keyframes bm-mfade{
+    0%{opacity:.8;transform:translate(-50%,-50%) scale(1)}
+    100%{opacity:0;transform:translate(-50%,-70%) scale(.7)}
+}
+
+/* ── 10 · Generic loader ───────────────────────────────────── */
+.bm-loader{
+    position:fixed;inset:0;background:var(--bg);z-index:200;
+    display:none;flex-direction:column;align-items:center;justify-content:center;
+    opacity:0;transition:opacity .3s;
+}
+.bm-loader.active{display:flex;opacity:1}
+.bm-spin{
+    width:32px;height:32px;border:2px solid var(--bd);border-top-color:var(--t1);
+    border-radius:50%;animation:bm-spin .6s linear infinite;margin-bottom:12px;
+}
+@keyframes bm-spin{to{transform:rotate(360deg)}}
+
+/* ── 11 · Inline form controls (numeric inputs in setup) ─── */
+.num-input{
+    background:var(--bg);border:1px solid var(--bd);color:var(--t1);
+    font-family:'Space Mono',monospace;font-size:12px;font-weight:700;
+    padding:4px 8px;width:64px;text-align:center;
+    transition:border-color .15s;
+}
+.num-input:focus{outline:none;border-color:var(--accent)}
+.num-input::-webkit-inner-spin-button,.num-input::-webkit-outer-spin-button{
+    -webkit-appearance:none;margin:0;
+}
+.num-input[type=number]{-moz-appearance:textfield}
+
+/* Compact "inline" pcheck variant for placing alongside other controls */
+.pcheck.inline{display:inline-flex;padding:5px 10px;margin-bottom:0}
+
+/* Sub-row that appears under a control when a related toggle is on */
+.sub-row{
+    display:flex;align-items:center;gap:8px;
+    margin-top:8px;padding:8px 12px;
+    background:var(--bg);border:1px solid var(--bd);
+    font-family:'Space Mono',monospace;font-size:10px;color:var(--t2);
+}
+.sub-row .sub-label{color:var(--t3);letter-spacing:.08em;text-transform:uppercase;font-size:9px}
+
+/* ── 12 · Quick Switcher (in-game pause + module nav) ─────
+   Floating button in HUD + full overlay with module icons.
+   Mounted via BM.mountQuickSwitcher() from shared.js. */
+
+/* Floating pause/menu button (visible during gameplay).
+   Positioned below the 52px HUD bar so it doesn't clash with stats. */
+.qs-btn{
+    position:fixed;top:62px;right:14px;z-index:150;
+    width:34px;height:34px;
+    background:var(--sf);border:1px solid var(--bd);
+    color:var(--t2);cursor:pointer;
+    display:none;align-items:center;justify-content:center;
+    line-height:1;
+    transition:all .2s;
+}
+.qs-btn.on{display:flex}
+.qs-btn:hover{color:var(--t1);border-color:var(--accent);transform:scale(1.08)}
+.qs-btn::before,.qs-btn::after{
+    content:'';display:block;width:3px;height:13px;background:currentColor;
+    margin:0 1.5px;border-radius:1px;
+}
+
+/* Overlay */
+.qs-overlay{
+    position:fixed;inset:0;z-index:400;
+    background:rgba(6,6,8,0);backdrop-filter:blur(0px);
+    display:flex;align-items:center;justify-content:center;
+    pointer-events:none;transition:all .3s;padding:24px;
+}
+.qs-overlay.on{
+    background:rgba(6,6,8,.94);backdrop-filter:blur(10px);
+    pointer-events:all;
+}
+.qs-panel{
+    width:100%;max-width:640px;
+    opacity:0;transform:translateY(20px) scale(.97);
+    transition:all .35s cubic-bezier(.16,1,.3,1);
+}
+.qs-overlay.on .qs-panel{opacity:1;transform:translateY(0) scale(1)}
+
+.qs-head{text-align:center;margin-bottom:24px}
+.qs-tag{
+    font-family:'Space Mono',monospace;
+    font-size:10px;letter-spacing:.3em;color:var(--accent);
+    border:1px solid var(--accent);padding:5px 14px;display:inline-block;
+}
+.qs-title{font-size:32px;font-weight:700;letter-spacing:.08em;margin-top:14px}
+.qs-sub{
+    font-family:'Space Mono',monospace;
+    font-size:10px;color:var(--t2);letter-spacing:.16em;
+    text-transform:uppercase;margin-top:4px;
+}
+
+/* Module icon grid */
+.qs-grid{
+    display:grid;
+    grid-template-columns:repeat(auto-fill,minmax(110px,1fr));
+    gap:8px;margin-bottom:24px;
+}
+.qs-tile{
+    background:var(--sf);border:1px solid var(--bd);
+    cursor:pointer;padding:18px 8px 14px;text-align:center;
+    transition:all .2s cubic-bezier(.165,.84,.44,1);
+    position:relative;
+}
+.qs-tile:hover{
+    background:var(--sf2);border-color:var(--tile-accent,var(--t2));
+    transform:translateY(-3px) scale(1.04);
+}
+.qs-tile.current{
+    border-color:var(--tile-accent,var(--accent));
+    background:var(--sf2);cursor:default;
+}
+.qs-tile.current::after{
+    content:'';position:absolute;top:6px;right:6px;
+    width:5px;height:5px;border-radius:50%;
+    background:var(--tile-accent,var(--accent));
+    box-shadow:0 0 6px var(--tile-accent,var(--accent));
+    animation:bm-pulse 1.4s infinite;
+}
+.qs-tile-icon{
+    font-size:28px;color:var(--tile-accent,var(--t2));opacity:.75;
+    transition:all .2s;line-height:1;
+}
+.qs-tile:hover .qs-tile-icon{opacity:1;transform:scale(1.12)}
+.qs-tile-name{
+    font-size:12px;font-weight:700;letter-spacing:.06em;
+    margin-top:8px;color:var(--t1);line-height:1.2;
+}
+.qs-tile-code{
+    font-family:'Space Mono',monospace;
+    font-size:8px;color:var(--t3);letter-spacing:.12em;margin-top:2px;
+}
+
+/* Action row */
+.qs-actions{display:flex;gap:8px;justify-content:center}
+.qs-action{
+    background:transparent;border:1px solid var(--bd);
+    padding:11px 26px;font-family:'Rajdhani',sans-serif;
+    font-size:13px;font-weight:700;letter-spacing:.14em;
+    cursor:pointer;color:var(--t2);transition:all .2s;
+}
+.qs-action:focus{outline:none}
+.qs-action:focus-visible{
+    box-shadow:0 0 0 2px var(--bg),0 0 0 3px var(--t2);
+}
+.qs-action:hover{border-color:var(--t2);color:var(--t1)}
+.qs-action.primary{background:var(--accent);color:var(--bg);border-color:var(--accent)}
+.qs-action.primary:hover{background:#fff;border-color:#fff;color:var(--bg)}
+.qs-hint{
+    text-align:center;margin-top:14px;
+    font-family:'Space Mono',monospace;font-size:9px;
+    color:var(--t3);letter-spacing:.12em;
+}

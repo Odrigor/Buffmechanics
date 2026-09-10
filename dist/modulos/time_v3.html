@@ -1,0 +1,592 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BuffMechanics | Reaction Time</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' fill='%23f97316'/%3E%3Ctext x='50%25' y='54%25' text-anchor='middle' dominant-baseline='middle' font-family='monospace' font-size='40' font-weight='700' fill='%23ffffff'%3EB%3C/text%3E%3Crect x='2' y='2' width='60' height='60' fill='none' stroke='%23ffffff' stroke-width='3'/%3E%3C/svg%3E">
+    <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="../assets/shared.css">
+    <style>
+        /* Reaction Time — orange identity (matches home card --mech-secondary).
+           Gold remains as semantic "personal best" color for pips, ranks, bars. */
+        :root{
+            --accent:#f97316;
+            --accent-dim:rgba(249,115,22,.12);
+            --gold:#eab308;
+            --red:#dc2626;
+            --red-bg:#1a0505;
+            --green:#10b981;
+            --green-bg:#031a10;
+        }
+        body{height:100vh;overflow:hidden;transition:background .08s}
+        body.wait{background:var(--red-bg)}
+        body.go{background:var(--green-bg)}
+
+        #screen{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;z-index:10;gap:12px}
+        .icon{font-size:48px;transition:transform .15s cubic-bezier(.34,1.56,.64,1);margin-bottom:8px}
+        body.go .icon{transform:scale(1.4)}
+        .main-text{font-size:64px;font-weight:700;letter-spacing:-2px;line-height:1;transition:transform .1s}
+        .sub-text{font-family:'Space Mono',monospace;font-size:11px;color:var(--t2);letter-spacing:.15em;margin-top:4px}
+        .flash{position:fixed;inset:0;z-index:5;pointer-events:none;opacity:0;transition:opacity .08s}
+        body.go .flash{background:rgba(16,185,129,.08);opacity:1}
+
+        /* In-game pips (module-specific). Compact variant kicks in for >10 rounds. */
+        .pips{position:fixed;top:20px;left:50%;transform:translateX(-50%);display:flex;gap:6px;z-index:100}
+        .pips.compact{gap:3px}
+        .pip{width:40px;height:4px;background:var(--t3);border-radius:2px;transition:all .3s;position:relative}
+        .pips.compact .pip{width:22px;height:3px}
+        .pip.done{background:var(--t2)}
+        .pip.best{background:var(--gold);box-shadow:0 0 8px rgba(234,179,8,.4)}
+        .pip.active{background:var(--green);box-shadow:0 0 6px rgba(16,185,129,.4)}
+        .pip-ms{position:absolute;top:8px;left:50%;transform:translateX(-50%);font-family:'Space Mono',monospace;font-size:8px;color:var(--t2);white-space:nowrap;opacity:0;transition:opacity .3s}
+        .pip.done .pip-ms,.pip.best .pip-ms{opacity:1}
+        .pips.compact .pip-ms{display:none}
+
+        .mod-label{position:fixed;top:20px;left:20px;z-index:100;pointer-events:none}
+        .round-label{position:fixed;top:20px;right:20px;z-index:100;pointer-events:none;text-align:right}
+
+        @keyframes shake{0%,100%{transform:translateX(0)}20%{transform:translateX(-12px)}40%{transform:translateX(10px)}60%{transform:translateX(-6px)}80%{transform:translateX(4px)}}
+        .shake{animation:shake .3s ease}
+
+        .result-flash{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);font-size:48px;font-weight:700;pointer-events:none;z-index:90;opacity:0;transition:opacity .15s}
+        .result-flash.show{opacity:1}
+
+        /* ═══ Quick Start + Tune ═══ */
+        .qs-card{display:flex;flex-direction:column;align-items:center;max-width:420px;width:100%;margin:0 auto}
+        .qs-mode{width:100%;text-align:center;background:var(--sf);border:1px solid var(--bd);padding:18px 20px;margin-bottom:12px;transition:border-color .2s}
+        .qs-mode-label{font-family:'Space Mono',monospace;font-size:9px;letter-spacing:.18em;color:var(--t3);text-transform:uppercase;margin-bottom:6px}
+        .qs-mode-value{font-size:24px;font-weight:700;letter-spacing:.02em;color:var(--t1);line-height:1}
+        .qs-mode-sub{font-family:'Space Mono',monospace;font-size:10px;color:var(--t2);margin-top:6px;letter-spacing:.04em}
+        .tune-toggle{width:100%;display:flex;align-items:center;justify-content:center;gap:8px;background:none;border:1px solid var(--bd);color:var(--t2);font-family:'Space Mono',monospace;font-size:10px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;padding:10px;cursor:pointer;margin-bottom:12px;transition:all .2s}
+        .tune-toggle:hover{border-color:var(--t2);color:var(--t1)}
+        .tune-toggle .chev{transition:transform .3s;display:inline-block}
+        .tune-toggle.open .chev{transform:rotate(90deg)}
+        .tune-panel{width:100%;overflow:hidden;max-height:0;opacity:0;transition:max-height .35s cubic-bezier(.4,0,.2,1),opacity .25s,margin .35s;margin-bottom:0}
+        .tune-panel.open{max-height:500px;opacity:1;margin-bottom:12px}
+        .tune-inner{background:var(--sf);border:1px solid var(--bd);padding:18px 18px 14px}
+
+        /* ═══ Redesigned results ═══ */
+        .res-metric{text-align:center;margin-bottom:6px}
+        .res-metric-value{font-size:56px;font-weight:700;color:var(--accent);line-height:1;letter-spacing:-1px}
+        .res-metric-unit{font-size:22px;color:var(--t2);font-weight:700;margin-left:4px}
+        .res-metric-label{font-family:'Space Mono',monospace;font-size:9px;letter-spacing:.16em;color:var(--t3);text-transform:uppercase;margin-top:6px}
+        .res-compare{text-align:center;font-family:'Space Mono',monospace;font-size:12px;letter-spacing:.04em;margin:14px 0;min-height:20px}
+        .res-compare.better{color:var(--green)}
+        .res-compare.worse{color:var(--t2)}
+        .res-compare.record{color:var(--gold)}
+        .res-compare .ar{font-weight:700;margin-right:4px}
+        .res-evo{margin:16px 0;padding:0 4px}
+        .res-evo-title{font-family:'Space Mono',monospace;font-size:8px;letter-spacing:.16em;color:var(--t3);text-transform:uppercase;margin-bottom:8px;display:flex;justify-content:space-between}
+        .res-evo-bars{display:flex;align-items:flex-end;gap:4px;height:60px}
+        .res-evo-bar-wrap{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;justify-content:flex-end}
+        .res-evo-bar{width:100%;background:var(--accent);opacity:.45;min-height:3px;border-radius:2px 2px 0 0;transition:height .5s cubic-bezier(.4,0,.2,1),opacity .2s}
+        .res-evo-bar.best{background:var(--gold);opacity:.95}
+        .res-evo-bar.miss{background:var(--red);opacity:.7}
+        .res-evo-bar:hover{opacity:1}
+        .res-evo-barms{font-family:'Space Mono',monospace;font-size:8px;color:var(--t2)}
+        .res-details{display:flex;justify-content:center;gap:18px;flex-wrap:wrap;font-family:'Space Mono',monospace;font-size:10px;color:var(--t2);margin:14px 0;letter-spacing:.04em}
+        .res-details b{color:var(--t1);font-weight:700}
+
+        /* Sober classification badge */
+        .rt-class{display:flex;align-items:center;justify-content:center;gap:10px;padding:10px;border:1px solid var(--bd);margin:14px 0;background:var(--bg)}
+        .rt-class-pct{font-size:18px;font-weight:700;letter-spacing:.02em}
+        .rt-class-label{font-family:'Space Mono',monospace;font-size:10px;letter-spacing:.1em;color:var(--t2);text-transform:uppercase}
+    </style>
+<link rel="stylesheet" href="../assets/experience.css">
+<link rel="stylesheet" href="../assets/workspace.css">
+</head>
+<body>
+<div class="flash"></div>
+<div class="result-flash" id="rflash"></div>
+
+<div class="pips" id="pips"></div>
+<div class="mod-label">
+    <div class="mono" style="font-size:8px;letter-spacing:.14em;color:var(--t2)">MODULE M-02</div>
+    <div style="font-size:20px;font-weight:700;letter-spacing:-.5px">REACTION <span style="color:var(--accent)">TIME</span></div>
+</div>
+<div class="round-label" id="rl">
+    <div class="mono" style="font-size:8px;letter-spacing:.14em;color:var(--t2)" data-i18n="time.round">ROUND</div>
+    <div style="font-size:20px;font-weight:700" id="rn">—</div>
+</div>
+
+<div id="screen">
+    <div class="icon" id="icon">⚡</div>
+    <div class="main-text" id="mt">REACTION TIME</div>
+    <div class="sub-text" id="st" data-i18n="time.st.selectmode">Select mode to begin</div>
+</div>
+
+<!-- ═══ SETUP ═══ -->
+<div class="setup" id="setup">
+    <button class="snd-toggle" id="snd-btn" onclick="Snd.toggle()">♪ ON</button>
+    <div class="setup-logo">TIME</div>
+    <div class="stitle">REACTION <em>TIME</em></div>
+    <div class="ssub" data-i18n="time.sub">Wait for green, click fast · measures pure reflex latency</div>
+
+    <div class="qs-card">
+        <!-- Recommended mode display -->
+        <div class="qs-mode" id="qs-mode">
+            <div class="qs-mode-label" data-i18n="m.mode">Mode</div>
+            <div class="qs-mode-value" id="qs-mode-value">5 rounds</div>
+            <div class="qs-mode-sub" id="qs-mode-sub">Relaxed · click to advance at your pace</div>
+        </div>
+
+        <button class="tune-toggle" id="tune-toggle" onclick="UI.toggleTune()">
+            <span class="chev">▸</span> <span data-i18n="m.tune">Tune</span>
+        </button>
+
+        <div class="tune-panel" id="tune-panel">
+            <div class="tune-inner">
+                <!-- Pace mode -->
+                <div class="pgroup">
+                    <div class="plabel" data-i18n="time.pace">Pace</div>
+                    <div class="pbtn-row" id="t-pace">
+                        <button class="pb on" onclick="UI.setPace('relaxed',this)" data-i18n="time.relaxed">Relaxed</button>
+                        <button class="pb" onclick="UI.setPace('reflex',this)" data-i18n="time.reflex">Pure reflex</button>
+                    </div>
+                    <div class="mono" style="font-size:9px;color:var(--t3);margin-top:6px;line-height:1.5" id="pace-hint" data-i18n="time.hint.relaxed">
+                        Relaxed: see your time each round, click to continue.
+                    </div>
+                </div>
+
+                <!-- Rounds -->
+                <div class="pgroup">
+                    <div class="plabel" data-i18n="m.rounds">Rounds</div>
+                    <div class="pbtn-row" id="t-rounds">
+                        <button class="pb" onclick="UI.setRounds(3,this)">3</button>
+                        <button class="pb on" onclick="UI.setRounds(5,this)">5</button>
+                        <button class="pb" onclick="UI.setRounds(10,this)">10</button>
+                        <button class="pb" onclick="UI.setRounds(20,this)">20</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <button class="gobtn" style="width:100%" onclick="G.launch()" data-i18n="m.start">▶ START</button>
+        <button class="gobtn-back" onmouseenter="Snd.tick(660)" onclick="BM.backToHome()" data-i18n="m.back">← BACK TO MENU</button>
+    </div>
+
+    <div class="hint">Wait for green. Click as fast as you can. Don't anticipate.</div>
+</div>
+
+<!-- ═══ RESULTS ═══ -->
+<div class="res hide" id="res">
+    <div class="rcard">
+        <div class="hl" style="text-align:center;margin-bottom:10px" id="r-mode-label">LATENCY REPORT</div>
+
+        <!-- Primary metric: average ms -->
+        <div class="res-metric">
+            <span class="res-metric-value" id="r-avg">0</span><span class="res-metric-unit">ms</span>
+            <div class="res-metric-label" data-i18n="time.metric">Average reaction time</div>
+        </div>
+
+        <!-- Comparison to personal best -->
+        <div class="res-compare" id="r-compare"></div>
+
+        <!-- This-session round breakdown -->
+        <div class="res-evo">
+            <div class="res-evo-title"><span data-i18n="time.thissession">This session</span><span id="r-session-best"></span></div>
+            <div class="res-evo-bars" id="r-round-bars"></div>
+        </div>
+
+        <!-- Classification (sober, data-like) -->
+        <div class="rt-class" id="rt-class">
+            <span class="rt-class-pct" id="rt-class-pct">—</span>
+            <span class="rt-class-label" id="rt-class-label"></span>
+        </div>
+
+        <!-- Secondary details -->
+        <div class="res-details" id="r-details"></div>
+
+        <div class="rbtns">
+            <button class="rb-s" onclick="location.href='../index.html'" data-i18n="m.exit">EXIT</button>
+            <button class="rb-s" onclick="G.toSetup()" data-i18n="m.menu">MENU</button>
+            <button class="rb-p" onclick="G.retry()" data-i18n="m.retry">RETRY</button>
+        </div>
+    </div>
+</div>
+
+<script src="../assets/i18n.js"></script>
+<script src="../assets/shared.js"></script>
+<script src="../assets/history.js"></script>
+<script src="../assets/training-core.js"></script>
+<script src="../assets/routine.js"></script>
+<script src="../assets/experience.js"></script>
+<script>
+const MODULE='time';
+
+// ═══ UI ═══
+const UI = {
+    pace: 'relaxed',     // 'relaxed' (click to advance) | 'reflex' (auto-cycle)
+    rounds: 5,
+    tuneOpen: false,
+
+    toggleTune(){
+        this.tuneOpen = !this.tuneOpen;
+        document.getElementById('tune-toggle').classList.toggle('open', this.tuneOpen);
+        document.getElementById('tune-panel').classList.toggle('open', this.tuneOpen);
+        Snd.tick(554);
+    },
+    setPace(p, btn){
+        this.pace = p;
+        BM.selectPb(btn);
+        document.getElementById('pace-hint').textContent = p === 'reflex'
+            ? I18N.t('time.hint.reflex')
+            : I18N.t('time.hint.relaxed');
+        this.refreshSummary();
+    },
+    setRounds(v, btn){ this.rounds = v; BM.selectPb(btn); this.refreshSummary(); },
+
+    refreshSummary(){
+        document.getElementById('qs-mode-value').textContent = this.rounds + ' ' + I18N.t('time.d.rounds');
+        document.getElementById('qs-mode-sub').textContent = this.pace === 'reflex'
+            ? I18N.t('time.sub.reflex')
+            : I18N.t('time.sub.relaxed');
+    }
+};
+
+// ═══ Pips (module-specific) ═══
+function buildPips(count){
+    const c=document.getElementById('pips');
+    c.innerHTML='';
+    c.classList.toggle('compact', count>10);
+    for(let i=0;i<count;i++){
+        const p=document.createElement('div');
+        p.className='pip';
+        p.innerHTML='<div class="pip-ms"></div>';
+        c.appendChild(p);
+    }
+}
+function updatePips(tries,activeIdx){
+    const pips=document.querySelectorAll('.pip');
+    const valid=tries.filter(t=>t>0);
+    const best=valid.length>0?Math.min(...valid):Infinity;
+    pips.forEach((p,i)=>{
+        p.className='pip';
+        if(i<tries.length&&tries[i]>0){
+            p.classList.add(tries[i]===best?'best':'done');
+            p.querySelector('.pip-ms').textContent=tries[i]+'ms';
+        } else if(i<tries.length&&tries[i]===-1){
+            p.classList.add('done');
+            p.querySelector('.pip-ms').textContent='MISS';
+            p.style.background='var(--red)';
+        } else if(i===activeIdx){
+            p.classList.add('active');
+        }
+    });
+}
+
+// ═══ GAME ═══
+const G = {
+    state:'idle', tries:[], t0:0, tid:null, goTid:null,
+    mode:'normal',     // 'normal' | 'advanced' | 'custom' (label only)
+    base:'normal',     // effective behavior: 'normal' | 'advanced'
+    rounds:5,
+    waitMax:5000,
+    progressive:false,
+    qs:null,
+
+    launch(){
+        Snd.init();
+        // pace: 'relaxed' → base 'normal' (click-advance); 'reflex' → base 'advanced' (auto-cycle)
+        this.base = UI.pace === 'reflex' ? 'advanced' : 'normal';
+        this.mode = UI.pace;
+        this.rounds = UI.rounds;
+        this.waitMax = UI.pace === 'reflex' ? 3200 : 5000;
+        this.progressive = false;
+        this.tries=[];this.state='idle';
+
+        document.getElementById('setup').classList.add('hide');
+        document.getElementById('res').classList.add('hide');
+        document.body.className='';
+        buildPips(this.rounds);
+        if(this.qs && this.qs.btn) this.qs.btn.classList.add('on');
+        this.beginRound();
+    },
+
+    retry(){
+        this.tries=[];
+        document.getElementById('res').classList.add('hide');
+        document.body.className='';
+        buildPips(this.rounds);
+        if(this.qs && this.qs.btn) this.qs.btn.classList.add('on');
+        this.beginRound();
+    },
+
+    toSetup(){
+        document.getElementById('res').classList.add('hide');
+        document.getElementById('setup').classList.remove('hide');
+        document.body.className='';
+        if(this.qs && this.qs.btn) this.qs.btn.classList.remove('on');
+        document.getElementById('icon').textContent='⚡';
+        document.getElementById('mt').textContent=I18N.t('time.st.title');
+        document.getElementById('mt').style.color='';
+        document.getElementById('st').textContent=I18N.t('time.st.begin');
+        document.getElementById('rn').textContent='—';
+        this.state='idle';
+    },
+
+    // Pause semantics: stop timers immediately, on resume restart the
+    // current round fresh. Avoids the abuse case of pausing mid-react.
+    pause(){
+        if(this.state==='idle' || this.state==='done')return;
+        this.scheduler.clear(this.tid);
+        this.scheduler.clear(this.goTid);
+        document.body.className='';
+        document.getElementById('icon').textContent='⏸';
+        document.getElementById('mt').textContent=I18N.t('time.st.paused');
+        document.getElementById('mt').style.color='var(--t2)';
+        document.getElementById('st').textContent='';
+    },
+    resume(){
+        if(this.state==='idle' || this.state==='done')return;
+        if(this.tries.length>=this.rounds){this.showResults();return}
+        this.beginRound();
+    },
+    exit(){
+        this.scheduler.clear(this.tid);
+        this.scheduler.clear(this.goTid);
+        document.body.className='';
+    },
+
+    // Wait window for current round. Min 1.2s, max = waitMax.
+    // Progressive shrinks max by 200ms per non-miss round already played.
+    nextDelay(){
+        let max=this.waitMax;
+        if(this.progressive){
+            const successes=this.tries.filter(t=>t>0).length;
+            max=Math.max(1500, max - successes*200);
+        }
+        const min=Math.min(1200, max-300);
+        return min + Math.random()*(max-min);
+    },
+
+    beginRound(){
+        const idx=this.tries.length;
+        if(idx>=this.rounds){this.showResults();return}
+        this.state='wait';
+        document.body.className='wait';
+        document.getElementById('rn').textContent=(idx+1)+'/'+this.rounds;
+        updatePips(this.tries,idx);
+
+        const icon=document.getElementById('icon');
+        const mt=document.getElementById('mt');
+        const st=document.getElementById('st');
+        icon.textContent='✋';
+        mt.textContent=I18N.t('time.st.wait');
+        mt.style.color='var(--red)';
+        st.textContent=this.base==='normal'?'don\'t click yet':'click only when green';
+
+        this.tid=this.scheduler.setTimeout(()=>{
+            if(this.state!=='wait')return;
+            this.scheduler.requestAnimationFrame(()=>{if(this.state==='wait')this.triggerGo();});
+        }, this.nextDelay());
+    },
+
+    triggerGo(){
+        this.state='go';this.t0=this.clock.now();
+        document.body.className='go';
+        // Visual response task: no advance audio cue.
+        document.getElementById('icon').textContent='🎯';
+        const mt=document.getElementById('mt');
+        mt.textContent=I18N.t('time.st.now');mt.style.color='var(--green)';
+        document.getElementById('st').textContent='';
+
+        if(this.base==='advanced'){
+            this.goTid=this.scheduler.setTimeout(()=>{
+                if(this.state!=='go')return;
+                this.tries.push(-1);
+                updatePips(this.tries,-1);
+                this.flashResult('MISS','var(--red)');
+                document.body.className='';
+                this.scheduler.setTimeout(()=>this.beginRound(),800);
+            }, 1500);
+        }
+    },
+
+    click(){
+        Snd.init();
+        // Block clicks while the switcher is open (defensive — overlay catches them anyway)
+        if(this.qs && this.qs.isOpen) return;
+
+        if(this.state==='wait'){
+            this.scheduler.clear(this.tid);this.scheduler.clear(this.goTid);
+            this.falseStarts=(this.falseStarts||0)+1;this.state='false';Snd.fail();
+            const mt=document.getElementById('mt');
+            document.getElementById('icon').textContent='⚠️';
+            mt.textContent=I18N.t('time.st.early');mt.style.color='var(--red)';
+            document.getElementById('st').textContent='';
+            mt.classList.add('shake');this.scheduler.setTimeout(()=>mt.classList.remove('shake'),300);
+
+            if(this.base==='advanced'){
+                this.scheduler.setTimeout(()=>{document.body.className='';this.beginRound()},900);
+            } else {
+                document.getElementById('st').textContent=I18N.t('time.st.retry');
+                this.state='false-wait';
+            }
+        }
+        else if(this.state==='go'){
+            this.scheduler.clear(this.goTid);
+            const ms=Math.round(this.clock.now()-this.t0);
+            this.tries.push(ms<100?-2:ms);if(ms<100)this.anticipations=(this.anticipations||0)+1;
+            this.state='captured';
+            Snd.hit();
+            updatePips(this.tries,-1);
+            document.body.className='';
+
+            if(this.base==='advanced'){
+                this.flashResult(ms+'ms', ms<200?'var(--green)':ms<300?'var(--gold)':'var(--t1)');
+                document.getElementById('icon').textContent='⏱';
+                document.getElementById('mt').textContent=ms+' ms';
+                document.getElementById('mt').style.color=ms<200?'var(--green)':ms<300?'var(--gold)':'var(--t1)';
+                document.getElementById('st').textContent='';
+                this.scheduler.setTimeout(()=>this.beginRound(),900);
+            } else {
+                document.getElementById('icon').textContent='⏱';
+                document.getElementById('mt').textContent=ms+' ms';
+                document.getElementById('mt').style.color=ms<200?'var(--green)':ms<300?'var(--gold)':'var(--t1)';
+                document.getElementById('st').textContent=this.tries.length<this.rounds?'Click for next round':'Click to see results';
+                this.state='show';
+            }
+        }
+        else if(this.state==='show'){
+            if(this.tries.length>=this.rounds)this.showResults();
+            else this.beginRound();
+        }
+        else if(this.state==='false-wait'){
+            this.beginRound();
+        }
+    },
+
+    flashResult(text,color){
+        const el=document.getElementById('rflash');
+        el.textContent=text;el.style.color=color;
+        el.classList.add('show');
+        this.scheduler.setTimeout(()=>el.classList.remove('show'),600);
+    },
+
+    showResults(){
+        this.state='done';
+        document.body.className='';
+        if(this.qs && this.qs.btn) this.qs.btn.classList.remove('on');
+
+        const valid=this.tries.filter(t=>t>0);
+        const misses=this.tries.filter(t=>t===-1).length;
+        const avg=valid.length>0?Math.round(valid.reduce((a,b)=>a+b,0)/valid.length):0;
+        const best=valid.length>0?Math.min(...valid):0;
+        const worst=valid.length>0?Math.max(...valid):0;
+
+        document.getElementById('r-mode-label').textContent =
+            (this.mode==='reflex'?I18N.t('time.label.reflex'):I18N.t('time.label.relaxed')) + ' — ' + I18N.t('time.report');
+
+        // ── Primary metric ──
+        document.getElementById('r-avg').textContent = avg;
+
+        // ── Persist BEFORE comparison (avgMs, lower is better) ──
+        const priorBest = Store.getBest(MODULE, 'avgMs');   // null if none
+        {
+            Store.saveSession(MODULE,{
+                mode:this.mode, avgMs:avg, best, worst, misses, rounds:this.rounds,
+                validCount:valid.length,falseStarts:this.falseStarts||0,anticipations:this.anticipations||0,attempts:this.tries.slice()
+            });
+            Store.saveBest(MODULE,'avgMs',avg,false);   // lower is better
+        }
+
+        // ── Comparison line ──
+        const cmpEl=document.getElementById('r-compare');
+        if(valid.length===0){
+            cmpEl.className='res-compare worse';
+            cmpEl.innerHTML='<span class="ar">—</span> ' + I18N.t('time.novalid');
+        } else if(priorBest===null||priorBest===undefined||priorBest===0){
+            cmpEl.className='res-compare record';
+            cmpEl.innerHTML='<span class="ar">★</span> ' + I18N.t('m.res.baseline').replace('★ ','');
+        } else {
+            const diff = avg - priorBest;   // negative = faster = better
+            if(diff < 0){
+                cmpEl.className='res-compare record';
+                cmpEl.innerHTML=`<span class="ar">▲</span> ${I18N.t('m.res.newbest')} · ${Math.abs(diff)}ms ${I18N.t('time.res.faster')}`;
+            } else if(diff===0){
+                cmpEl.className='res-compare better';
+                cmpEl.innerHTML=`<span class="ar">=</span> ${I18N.t('m.res.matched')} (${priorBest}ms)`;
+            } else {
+                cmpEl.className='res-compare worse';
+                cmpEl.innerHTML=`<span class="ar">▾</span> ${diff}ms ${I18N.t('time.res.slower')} (${priorBest}ms)`;
+            }
+        }
+
+        // ── This-session round breakdown (bars per round) ──
+        this.renderRoundBars(best);
+
+        // ── Sober classification (percentile-based, honest) ──
+        // Reference distribution for visual-reaction-time (click) benchmarks.
+        this.renderClassification(avg, valid.length);
+
+        // ── Secondary details ──
+        document.getElementById('r-details').innerHTML =
+            `<span>${I18N.t('m.res.best')} <b>${best}ms</b></span>` +
+            `<span>${I18N.t('time.d.worst')} <b>${worst}ms</b></span>` +
+            (misses>0 ? `<span>${I18N.t('time.d.misses')} <b>${misses}</b></span>` : '') +
+            `<span><b>${this.rounds}</b> ${I18N.t('time.d.rounds')}</span>`;
+
+        document.getElementById('res').classList.remove('hide');
+    },
+
+    // Per-round bars for the current session
+    renderRoundBars(best){
+        const bars=document.getElementById('r-round-bars');
+        const sessBest=document.getElementById('r-session-best');
+        bars.innerHTML='';
+        const valid=this.tries.filter(t=>t>0);
+        const maxMs=Math.max(...valid,350,1);
+        sessBest.textContent = best>0 ? I18N.t('m.res.best')+' '+best+'ms' : '';
+
+        this.tries.forEach((ms)=>{
+            const wrap=document.createElement('div');
+            wrap.className='res-evo-bar-wrap';
+            const isMiss = ms<0;
+            const lbl=document.createElement('div');
+            lbl.className='res-evo-barms';
+            lbl.textContent = isMiss ? '✕' : ms;
+            if(isMiss) lbl.style.color='var(--red)';
+            const bar=document.createElement('div');
+            bar.className='res-evo-bar'+(isMiss?' miss':ms===best?' best':'');
+            bar.style.height='0%';
+            wrap.appendChild(lbl);
+            wrap.appendChild(bar);
+            bars.appendChild(wrap);
+            const h = isMiss ? 100 : (ms/maxMs*100);
+            this.scheduler.requestAnimationFrame(()=>{ bar.style.height=Math.max(6,h)+'%'; });
+        });
+    },
+
+    // Show valid sample size; no population reference is claimed.
+    renderClassification(avg, validCount){
+        document.getElementById('rt-class-pct').textContent=validCount+' / '+this.rounds;
+        document.getElementById('rt-class-label').textContent=BM.text('Respuestas válidas · comparación personal','Valid responses · personal comparison');
+    }
+};
+
+// ═══ INIT ═══
+buildPips(UI.rounds);
+UI.refreshSummary();
+document.getElementById('screen').addEventListener('click',()=>G.click());
+if(!Snd.on) document.getElementById('snd-btn').textContent='♪ OFF';
+
+// Re-render dynamic text on language change (static data-i18n auto-updates)
+window.addEventListener('langchange', () => {
+    UI.refreshSummary();
+    const hint = document.getElementById('pace-hint');
+    if(hint) hint.textContent = UI.pace === 'reflex' ? I18N.t('time.hint.reflex') : I18N.t('time.hint.relaxed');
+});
+
+// Quick switcher — pause + module nav
+BM.attachTraining({module:MODULE,game:G,ui:UI,start:'launch',finish:'showResults'});
+G.qs = BM.mountQuickSwitcher({
+    current: MODULE,
+    onPause:  () => G.pause(),
+    onResume: () => G.resume(),
+    onExit:   () => G.exit()
+});
+</script>
+</body>
+</html>

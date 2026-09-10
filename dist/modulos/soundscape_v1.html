@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="A guided ambient sound experience for focus, rhythm and recovery.">
+    <title>BuffMechanics | Soundscape</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' fill='%2306090d'/%3E%3Cpath d='M10 35c7-14 14-14 21 0s14 14 23 0' fill='none' stroke='%230ea5e9' stroke-width='5' stroke-linecap='round'/%3E%3Crect x='2' y='2' width='60' height='60' fill='none' stroke='%230ea5e9' stroke-width='2'/%3E%3C/svg%3E">
+    <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="../assets/shared.css">
+    <link rel="stylesheet" href="../assets/experience.css">
+    <link rel="stylesheet" href="../assets/workspace.css">
+    <link rel="stylesheet" href="../assets/soundscape.css">
+</head>
+<body>
+    <header class="ss-header">
+        <a class="ss-brand" href="../index.html" aria-label="BuffMechanics">
+            <span class="ss-mark" aria-hidden="true"><i></i><i></i><i></i></span>
+            <span>
+                <strong>SOUND<span>SCAPE</span></strong>
+                <small id="brand-sub">Sonido ambiental · a tu ritmo</small>
+            </span>
+        </a>
+        <div class="ss-header-actions">
+            <button class="ss-text-btn" id="restart-guide" type="button" hidden></button>
+            <button class="ss-back" id="back-home" type="button"></button>
+        </div>
+    </header>
+
+    <main class="ss-shell">
+        <section class="ss-view chooser is-active" id="chooser" aria-labelledby="chooser-title">
+            <div class="ss-step-line">
+                <span class="ss-kicker" id="chooser-kicker"></span>
+                <span class="ss-step" id="chooser-step"></span>
+            </div>
+            <div class="ss-intro">
+                <h1 id="chooser-title" tabindex="-1"></h1>
+                <p id="chooser-copy"></p>
+            </div>
+
+            <button class="last-session" id="last-session" type="button" hidden>
+                <span class="last-eyebrow" id="last-eyebrow"></span>
+                <strong id="last-name"></strong>
+                <span class="last-action" id="last-action"></span>
+            </button>
+
+            <div class="intent-grid" id="intent-grid" role="list"></div>
+
+            <p class="ss-disclaimer" id="chooser-note"></p>
+        </section>
+
+        <section class="ss-view recommendation" id="recommendation" aria-labelledby="recommend-title" hidden>
+            <button class="ss-text-btn ss-inline-back" id="recommend-back" type="button"></button>
+            <div class="ss-step-line">
+                <span class="ss-kicker" id="recommend-kicker"></span>
+                <span class="ss-step" id="recommend-step"></span>
+            </div>
+
+            <div class="recommend-layout">
+                <div class="recommend-context">
+                    <div class="mode-sigil" id="recommend-sigil" aria-hidden="true"></div>
+                    <div class="mode-frequency" id="recommend-frequency"></div>
+                    <h1 id="recommend-title" tabindex="-1"></h1>
+                    <p id="recommend-copy"></p>
+                    <div class="headphone-note" id="headphone-note" hidden>
+                        <span aria-hidden="true">L/R</span>
+                        <p id="headphone-copy"></p>
+                    </div>
+                </div>
+
+                <div class="recommend-picker">
+                    <div class="recommend-label" id="recommend-label"></div>
+                    <div class="style-grid" id="style-grid" role="radiogroup"></div>
+                    <button class="show-all-styles" id="all-styles-button" type="button"></button>
+                    <div class="preview-status" id="preview-status" aria-live="polite">
+                        <span id="preview-label"></span>
+                        <span class="preview-track"><i id="preview-progress"></i></span>
+                    </div>
+                    <div class="recommend-actions">
+                        <button class="ss-secondary" id="preview-button" type="button"></button>
+                        <button class="ss-primary" id="start-button" type="button"></button>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="ss-view player-view" id="player" aria-labelledby="player-mode" hidden>
+            <div class="player-topline">
+                <div class="live-state"><i></i><span id="live-label"></span></div>
+                <div class="elapsed" id="elapsed">00:00</div>
+            </div>
+
+            <div class="player-layout">
+                <div class="sound-stage" id="sound-stage">
+                    <canvas id="visualizer" aria-hidden="true"></canvas>
+                    <div class="stage-rings" aria-hidden="true"><i></i><i></i><i></i></div>
+                    <div class="stage-core">
+                        <span id="player-frequency"></span>
+                        <strong id="player-style"></strong>
+                    </div>
+                </div>
+
+                <aside class="player-panel">
+                    <span class="ss-kicker" id="player-kicker"></span>
+                    <h1 id="player-mode" tabindex="-1"></h1>
+                    <p class="player-description" id="player-description"></p>
+
+                    <div class="control-stack">
+                        <label class="range-control" for="volume-range">
+                            <span><b id="volume-label"></b><output id="volume-output"></output></span>
+                            <input id="volume-range" type="range" min="0" max="100" step="1">
+                        </label>
+                        <label class="range-control" for="intensity-range">
+                            <span><b id="intensity-label"></b><output id="intensity-output"></output></span>
+                            <input id="intensity-range" type="range" min="0" max="100" step="1">
+                        </label>
+                        <label class="range-control" for="brightness-range">
+                            <span><b id="brightness-label"></b><output id="brightness-output"></output></span>
+                            <input id="brightness-range" type="range" min="0" max="100" step="1">
+                        </label>
+                    </div>
+
+                    <div class="transport">
+                        <button class="transport-main" id="pause-button" type="button" aria-label="Pause"></button>
+                        <button class="ss-secondary" id="change-button" type="button"></button>
+                        <button class="ss-text-btn" id="stop-button" type="button"></button>
+                    </div>
+
+                    <p class="player-note" id="player-note"></p>
+                </aside>
+            </div>
+        </section>
+    </main>
+
+    <div class="ss-toast" id="ss-toast" role="status" aria-live="polite"></div>
+
+    <script src="../assets/i18n.js"></script>
+    <script src="../assets/shared.js"></script>
+    <script src="../assets/history.js"></script>
+    <script src="../assets/training-core.js"></script>
+    <script src="../assets/routine.js"></script>
+    <script src="../assets/experience.js"></script>
+    <script src="../assets/soundscape.js"></script>
+</body>
+</html>

@@ -1,0 +1,1433 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BuffMechanics | Aim Protocol</title>
+        <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' fill='%23ef4444'/%3E%3Ctext x='50%25' y='54%25' text-anchor='middle' dominant-baseline='middle' font-family='monospace' font-size='40' font-weight='700' fill='%23ffffff'%3EB%3C/text%3E%3Crect x='2' y='2' width='60' height='60' fill='none' stroke='%23ffffff' stroke-width='3'/%3E%3C/svg%3E">
+    <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="../assets/shared.css">
+    <style>
+        /* Aim Protocol accents — matches its home card (--mech red) */
+        :root{
+            --accent:#ef4444;
+            --accent-dim:rgba(239,68,68,.12);
+        }
+        body{overflow:hidden;height:100vh}
+
+        /* Module-specific crosshair: white for max contrast against red targets */
+        #xhair::before,#xhair::after{background:rgba(255,255,255,.95) !important}
+        .xhair-dot{background:#fff !important}
+
+        /* ═══ ARENA & TARGETS ═══ */
+        #arena{position:fixed;inset:0;z-index:10}
+
+        .tgt{position:absolute;border-radius:50%;transform:translate(-50%,-50%) scale(0);cursor:none;z-index:20;animation:tin .12s cubic-bezier(.34,1.56,.64,1) forwards}
+        @keyframes tin{to{transform:translate(-50%,-50%) scale(1)}}
+        .tgt-r{width:100%;height:100%;border-radius:50%;border:2px solid var(--accent);display:flex;align-items:center;justify-content:center;transition:all .1s}
+        .tgt-c{width:30%;height:30%;border-radius:50%;background:var(--accent);box-shadow:0 0 10px var(--accent);transition:all .1s}
+        .tgt:hover .tgt-r{border-color:#fff;background:var(--accent-dim)}
+        .tgt:hover .tgt-c{background:#fff;box-shadow:0 0 16px #fff}
+
+        /* Shrinking timer ring */
+        .tgt-timer{position:absolute;inset:-3px;border-radius:50%;border:2px solid transparent;border-top-color:var(--warn);opacity:0}
+        .tgt.ticking .tgt-timer{opacity:.6;animation:tshrink var(--life) linear forwards}
+        @keyframes tshrink{0%{transform:rotate(0deg)}100%{transform:rotate(1080deg)}}
+
+        /* ═══ NEW SETUP: Quick Start + Tune ═══ */
+        .qs-card{
+            display:flex;flex-direction:column;align-items:center;
+            max-width:720px;width:100%;margin:0 auto;
+        }
+        .aim-profile-stage{width:100%;margin-top:24px}
+        .aim-profile-intro{text-align:center;margin-bottom:16px}
+        .aim-profile-kicker{
+            font-family:'Space Mono',monospace;font-size:12px;font-weight:700;
+            letter-spacing:.16em;color:var(--accent);text-transform:uppercase;
+        }
+        .aim-profile-title{font-size:26px;line-height:1.1;margin:5px 0 4px;color:var(--t1)}
+        .aim-profile-help{font-size:14px;line-height:1.45;color:var(--t2);margin:0}
+        .aim-profile-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+        .aim-profile-card{
+            position:relative;min-width:0;background:var(--sf);border:1px solid var(--bd);
+            transition:border-color .18s,transform .18s,background .18s;
+        }
+        .aim-profile-card::before{
+            content:'';position:absolute;left:-1px;right:-1px;top:-1px;height:2px;
+            background:var(--accent);transform:scaleX(0);transform-origin:left;
+            transition:transform .2s;pointer-events:none;
+        }
+        .aim-profile-card:hover,.aim-profile-card:focus-within{
+            border-color:rgba(239,68,68,.65);background:linear-gradient(145deg,var(--accent-dim),var(--sf));
+            transform:translateY(-2px);
+        }
+        .aim-profile-card:hover::before,.aim-profile-card:focus-within::before{transform:scaleX(1)}
+        .aim-profile-launch{
+            width:100%;min-height:248px;display:flex;flex-direction:column;align-items:flex-start;
+            padding:17px 16px 15px;text-align:left;color:inherit;background:transparent;border:0;
+            cursor:pointer;font-family:'Rajdhani',sans-serif;
+        }
+        .aim-profile-launch:focus{outline:none}
+        .aim-profile-launch:focus-visible{box-shadow:inset 0 0 0 2px var(--accent)}
+        .aim-profile-top{width:100%;display:flex;align-items:center;justify-content:space-between;margin-bottom:22px}
+        .aim-profile-code{
+            font-family:'Space Mono',monospace;font-size:12px;font-weight:700;
+            color:var(--t3);letter-spacing:.1em;
+        }
+        .aim-profile-icon{font-family:'Space Mono',monospace;font-size:25px;color:var(--accent);line-height:1}
+        .aim-profile-name{font-size:23px;font-weight:700;color:var(--t1);line-height:1;margin-bottom:7px}
+        .aim-profile-desc{font-size:14px;line-height:1.35;color:var(--t2);min-height:57px}
+        .aim-profile-meta{
+            font-family:'Space Mono',monospace;font-size:12px;line-height:1.45;color:var(--t3);
+            margin-top:auto;padding-top:14px;
+        }
+        .aim-profile-cta{
+            font-family:'Space Mono',monospace;font-size:12px;font-weight:700;
+            letter-spacing:.1em;color:var(--accent);margin-top:12px;text-transform:uppercase;
+        }
+        .aim-profile-card.custom .aim-profile-launch{min-height:207px}
+        .aim-profile-edit{
+            width:calc(100% - 30px);margin:0 15px 14px;padding:8px 10px;
+            background:transparent;border:1px solid var(--bd);color:var(--t2);cursor:pointer;
+            font-family:'Space Mono',monospace;font-size:12px;font-weight:700;letter-spacing:.08em;
+            text-transform:uppercase;transition:all .15s;
+        }
+        .aim-profile-edit:hover,.aim-profile-edit:focus-visible{border-color:var(--accent);color:var(--t1);outline:none}
+        .aim-custom-workspace{width:100%;max-width:520px;margin-top:22px}
+        .aim-custom-head{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;margin-bottom:12px}
+        .aim-custom-head h2{font-size:23px;line-height:1;margin:0;color:var(--t1)}
+        .aim-custom-head p{font-size:14px;line-height:1.4;color:var(--t2);margin:5px 0 0}
+        .aim-custom-badge{
+            flex:none;font-family:'Space Mono',monospace;font-size:12px;color:var(--accent);
+            border:1px solid rgba(239,68,68,.45);padding:6px 8px;letter-spacing:.08em;
+        }
+        .aim-custom-actions{display:grid;grid-template-columns:1fr auto;gap:8px;margin-top:0}
+        .aim-custom-actions .gobtn{margin:0}
+        .aim-profile-back{
+            background:transparent;border:1px solid var(--bd);color:var(--t2);padding:0 16px;
+            cursor:pointer;font-family:'Space Mono',monospace;font-size:12px;font-weight:700;
+            letter-spacing:.06em;transition:all .15s;
+        }
+        .aim-profile-back:hover,.aim-profile-back:focus-visible{border-color:var(--t2);color:var(--t1);outline:none}
+        .bm-routine-setup .aim-profile-stage{display:none}
+        .bm-routine-setup .aim-custom-workspace{display:block !important}
+        .bm-routine-setup .aim-custom-head{display:none}
+        .bm-routine-setup .aim-custom-actions{display:none}
+        @media(max-width:700px){
+            .qs-card{max-width:460px}
+            .aim-profile-grid{grid-template-columns:1fr}
+            .aim-profile-launch,.aim-profile-card.custom .aim-profile-launch{min-height:0}
+            .aim-profile-desc{min-height:0}
+            .aim-profile-top{margin-bottom:12px}
+            .aim-custom-head{align-items:flex-start;flex-direction:column}
+            .aim-custom-actions{grid-template-columns:1fr}
+            .aim-profile-back{min-height:42px}
+        }
+        @media(max-height:800px){.setup{justify-content:flex-start}}
+        /* The big recommended-mode display */
+        .qs-mode{
+            width:100%;text-align:center;
+            background:var(--sf);border:1px solid var(--bd);
+            padding:18px 20px;margin-bottom:12px;
+            transition:border-color .2s;
+        }
+        .qs-mode-label{
+            font-family:'Space Mono',monospace;font-size:9px;
+            letter-spacing:.18em;color:var(--t3);text-transform:uppercase;
+            margin-bottom:6px;
+        }
+        .qs-mode-value{
+            font-size:24px;font-weight:700;letter-spacing:.02em;color:var(--t1);
+            line-height:1;
+        }
+        .qs-mode-sub{
+            font-family:'Space Mono',monospace;font-size:10px;
+            color:var(--t2);margin-top:6px;letter-spacing:.04em;
+        }
+
+        /* Tune toggle (accordion header) */
+        .tune-toggle{
+            width:100%;display:flex;align-items:center;justify-content:center;gap:8px;
+            background:none;border:1px solid var(--bd);color:var(--t2);
+            font-family:'Space Mono',monospace;font-size:10px;font-weight:700;
+            letter-spacing:.14em;text-transform:uppercase;
+            padding:10px;cursor:pointer;margin-bottom:12px;
+            transition:all .2s;
+        }
+        .tune-toggle:hover{border-color:var(--t2);color:var(--t1)}
+        .tune-toggle .chev{transition:transform .3s;display:inline-block}
+        .tune-toggle.open .chev{transform:rotate(90deg)}
+
+        /* Tune panel (accordion body) */
+        .tune-panel{
+            width:100%;overflow:hidden;
+            max-height:0;opacity:0;
+            transition:max-height .35s cubic-bezier(.4,0,.2,1), opacity .25s, margin .35s;
+            margin-bottom:0;
+        }
+        .tune-panel.open{
+            max-height:900px;opacity:1;margin-bottom:12px;
+        }
+        .tune-inner{
+            background:var(--sf);border:1px solid var(--bd);
+            padding:18px 18px 14px;
+        }
+        /* Advanced sub-section divider */
+        .tune-adv-divider{
+            display:flex;align-items:center;gap:10px;
+            margin:16px 0 12px;
+            font-family:'Space Mono',monospace;font-size:8px;
+            letter-spacing:.16em;color:var(--t3);text-transform:uppercase;
+        }
+        .tune-adv-divider::before,.tune-adv-divider::after{
+            content:'';flex:1;height:1px;background:var(--bd);
+        }
+        .spawn-random-toggle{margin-top:10px;font-family:'Rajdhani',sans-serif}
+        .spawn-random-details{
+            max-height:0;opacity:0;overflow:hidden;pointer-events:none;
+            transition:max-height .25s ease,opacity .2s ease,margin .25s ease;
+            margin-top:0;
+        }
+        .spawn-random-details.on{max-height:120px;opacity:1;pointer-events:auto;margin-top:9px}
+        .spawn-random-control{
+            padding:10px 12px;background:var(--bg);border:1px solid var(--bd);
+        }
+        .spawn-random-label{
+            display:flex;align-items:center;justify-content:space-between;gap:12px;
+            font-family:'Space Mono',monospace;font-size:8px;letter-spacing:.12em;
+            color:var(--t3);text-transform:uppercase;margin-bottom:9px;
+        }
+        .spawn-random-label strong{font-size:11px;color:var(--accent);letter-spacing:0}
+        .spawn-range-preview{
+            font-family:'Space Mono',monospace;font-size:9px;color:var(--t2);
+            margin-top:9px;line-height:1.5;
+        }
+        .spawn-range-preview strong{color:var(--t1);font-weight:700}
+        .spawn-range-note{
+            font-family:'Space Mono',monospace;font-size:8px;color:var(--t3);
+            line-height:1.5;margin-top:4px;
+        }
+
+        /* Speed feedback — used by Progressive and Survival */
+        .speed-progress{
+            display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:12px;
+            min-width:330px;padding:9px 12px;background:rgba(8,8,12,.88);
+            border:1px solid var(--bd);backdrop-filter:blur(8px);
+        }
+        .speed-progress-name{
+            font-family:'Space Mono',monospace;font-size:10px;font-weight:700;
+            letter-spacing:.12em;color:var(--t3);text-transform:uppercase;
+        }
+        .speed-progress .spips{display:grid;grid-template-columns:repeat(10,1fr);gap:3px;min-width:150px}
+        .speed-progress .spip,.speed-progress .spip.a,.speed-progress .spip.f{
+            width:auto;height:4px;border-radius:0;background:var(--t3);box-shadow:none;
+        }
+        .speed-progress .spip.a{background:var(--accent);box-shadow:0 0 5px rgba(239,68,68,.55)}
+        .speed-progress.boost{border-color:var(--warn);animation:aim-speed-pulse .7s ease-out}
+        .speed-progress.boost .speed-progress-name,.speed-progress.boost .slbl{color:var(--warn) !important}
+        .speed-progress.max .spip{background:var(--accent);box-shadow:0 0 5px rgba(239,68,68,.55)}
+        .speed-progress.max .speed-progress-name,.speed-progress.max .slbl{color:var(--accent) !important}
+        @keyframes aim-speed-pulse{
+            0%{box-shadow:0 0 0 rgba(245,158,11,0);transform:translateX(-50%) scale(1)}
+            25%{box-shadow:0 0 24px rgba(245,158,11,.32);transform:translateX(-50%) scale(1.035)}
+            100%{box-shadow:0 0 0 rgba(245,158,11,0);transform:translateX(-50%) scale(1)}
+        }
+        .speed-progress .slbl{font-size:11px;min-width:34px;text-align:right;color:var(--t2)}
+        @media(max-width:380px){
+            .speed-progress{
+                box-sizing:border-box;min-width:0;width:calc(100vw - 24px);
+                grid-template-columns:1fr auto;gap:7px 10px;
+            }
+            .speed-progress-name{grid-column:1/-1}
+        }
+
+        /* ═══ REDESIGNED RESULTS ═══ */
+        .res-metric{
+            text-align:center;margin-bottom:6px;
+        }
+        .res-metric-value{
+            font-size:56px;font-weight:700;color:var(--accent);line-height:1;
+            letter-spacing:-1px;
+        }
+        .res-metric-unit{
+            font-size:22px;color:var(--t2);font-weight:700;margin-left:4px;
+        }
+        .res-metric-label{
+            font-family:'Space Mono',monospace;font-size:9px;
+            letter-spacing:.16em;color:var(--t3);text-transform:uppercase;
+            margin-top:6px;
+        }
+        /* Comparison to best */
+        .res-compare{
+            text-align:center;font-family:'Space Mono',monospace;
+            font-size:12px;letter-spacing:.04em;margin:14px 0;
+            min-height:20px;
+        }
+        .res-compare.better{color:var(--hit)}
+        .res-compare.worse{color:var(--t2)}
+        .res-compare.record{color:var(--gold,#eab308)}
+        .res-compare .ar{font-weight:700;margin-right:4px}
+
+        /* Evolution chart */
+        .res-evo{
+            margin:16px 0;padding:0 4px;
+        }
+        .res-evo-title{
+            font-family:'Space Mono',monospace;font-size:8px;
+            letter-spacing:.16em;color:var(--t3);text-transform:uppercase;
+            margin-bottom:8px;display:flex;justify-content:space-between;
+        }
+        .res-evo-bars{
+            display:flex;align-items:flex-end;gap:3px;height:54px;
+        }
+        .res-evo-bar{
+            flex:1;background:var(--accent);opacity:.35;
+            min-height:3px;border-radius:1px;
+            transition:height .4s cubic-bezier(.4,0,.2,1), opacity .2s;
+        }
+        .res-evo-bar.latest{opacity:.95}
+        .res-evo-bar:hover{opacity:1}
+        .res-evo-empty{
+            font-family:'Space Mono',monospace;font-size:9px;
+            color:var(--t3);text-align:center;padding:18px 0;letter-spacing:.1em;
+        }
+        /* Secondary details row */
+        .res-details{
+            display:flex;justify-content:center;gap:18px;flex-wrap:wrap;
+            font-family:'Space Mono',monospace;font-size:10px;color:var(--t2);
+            margin:14px 0;letter-spacing:.04em;
+        }
+        .res-details b{color:var(--t1);font-weight:700}
+    </style>
+<link rel="stylesheet" href="../assets/experience.css">
+<link rel="stylesheet" href="../assets/workspace.css">
+</head>
+<body>
+<div id="xhair" class="xhair"><div class="xhair-dot"></div></div>
+
+<!-- ═══ HUD ═══ -->
+<div class="hud" id="hud">
+    <div class="hb">
+        <span class="hl">Score</span>
+        <span class="hv" style="color:var(--accent)" id="h-sc">0</span>
+    </div>
+    <div class="hb c">
+        <div class="tpill">
+            <div class="tdot" id="h-tdot"></div>
+            <span class="hv" id="h-tm" style="font-size:20px">60</span>
+        </div>
+        <div class="lives" id="h-lives" style="margin-top:4px"></div>
+    </div>
+    <div class="hb r">
+        <span class="hl">Accuracy</span>
+        <span class="hv" id="h-ac">100%</span>
+    </div>
+</div>
+
+<div class="streak-wrap speed-progress" id="stwrap" aria-hidden="true">
+    <span class="speed-progress-name" id="speed-progress-name" data-i18n="aim.speed.next">Next speed</span>
+    <div class="spips" id="stbar" role="progressbar" aria-label="Targets until the next speed increase" aria-valuemin="0" aria-valuemax="10" aria-valuenow="0"></div>
+    <span class="slbl" id="stval">0/10</span>
+    <span class="bm-sr-only" id="speed-progress-live" aria-live="polite"></span>
+</div>
+
+<div id="arena"></div>
+
+<!-- ═══ SETUP ═══ -->
+<div class="setup" id="setup">
+    <button class="snd-toggle" id="snd-btn" onclick="Snd.toggle()">♪ ON</button>
+    <div class="setup-logo">AIM</div>
+    <div class="stitle">AIM <em>PROTOCOL</em></div>
+    <div class="ssub" data-i18n="aim.sub">Click targets fast and clean · trains precision + reflex</div>
+
+    <div class="qs-card">
+        <section class="aim-profile-stage" id="aim-profile-stage" aria-labelledby="aim-profile-title">
+            <div class="aim-profile-intro">
+                <div class="aim-profile-kicker" data-i18n="aim.profile.kicker">Quick start</div>
+                <h2 class="aim-profile-title" id="aim-profile-title" data-i18n="aim.profile.title">Choose your training style</h2>
+                <p class="aim-profile-help" data-i18n="aim.profile.help">One click loads the profile and starts the session.</p>
+            </div>
+            <div class="aim-profile-grid">
+                <article class="aim-profile-card">
+                    <button type="button" class="aim-profile-launch" onclick="UI.startProfile('shooter')" aria-describedby="aim-shooter-desc aim-shooter-meta">
+                        <span class="aim-profile-top"><span class="aim-profile-code">S-01</span><span class="aim-profile-icon" aria-hidden="true">⌖</span></span>
+                        <strong class="aim-profile-name">Shooter</strong>
+                        <span class="aim-profile-desc" id="aim-shooter-desc" data-i18n="aim.profile.shooter">Flicks, side entries and short micro-adjustments.</span>
+                        <span class="aim-profile-meta" id="aim-shooter-meta"></span>
+                        <span class="aim-profile-cta" data-i18n="aim.profile.start">Practice →</span>
+                    </button>
+                </article>
+                <article class="aim-profile-card">
+                    <button type="button" class="aim-profile-launch" onclick="UI.startProfile('moba')" aria-describedby="aim-moba-desc aim-moba-meta">
+                        <span class="aim-profile-top"><span class="aim-profile-code">M-02</span><span class="aim-profile-icon" aria-hidden="true">◇</span></span>
+                        <strong class="aim-profile-name">MOBA</strong>
+                        <span class="aim-profile-desc" id="aim-moba-desc" data-i18n="aim.profile.moba">Moving trajectories, rebounds and nearby targets.</span>
+                        <span class="aim-profile-meta" id="aim-moba-meta"></span>
+                        <span class="aim-profile-cta" data-i18n="aim.profile.start">Practice →</span>
+                    </button>
+                </article>
+                <article class="aim-profile-card custom">
+                    <button type="button" class="aim-profile-launch" onclick="UI.startProfile('custom')" aria-describedby="aim-custom-desc aim-custom-meta">
+                        <span class="aim-profile-top"><span class="aim-profile-code">P-03</span><span class="aim-profile-icon" aria-hidden="true">＋</span></span>
+                        <strong class="aim-profile-name" data-i18n="aim.profile.custom">Custom</strong>
+                        <span class="aim-profile-desc" id="aim-custom-desc" data-i18n="aim.profile.custom.empty">Create your own profile once, then start it with one click.</span>
+                        <span class="aim-profile-meta" id="aim-custom-meta"></span>
+                        <span class="aim-profile-cta" id="aim-custom-cta">Configure →</span>
+                    </button>
+                    <button type="button" class="aim-profile-edit" id="aim-custom-edit" onclick="UI.editCustom()">Configure</button>
+                </article>
+            </div>
+        </section>
+
+        <section class="aim-custom-workspace" id="aim-custom-workspace" hidden aria-labelledby="aim-custom-title">
+            <div class="aim-custom-head">
+                <div>
+                    <h2 id="aim-custom-title" data-i18n="aim.custom.title">Your custom profile</h2>
+                    <p data-i18n="aim.custom.help">Adjust it once. Saving will make Custom a one-click start.</p>
+                </div>
+            <span class="aim-custom-badge" id="aim-custom-save-state">Not saved yet</span>
+            </div>
+
+            <!-- Current custom configuration summary -->
+            <div class="qs-mode" id="qs-mode">
+                <div class="qs-mode-label" data-i18n="m.mode">Mode</div>
+                <div class="qs-mode-value" id="qs-mode-value">60 seconds</div>
+                <div class="qs-mode-sub" id="qs-mode-sub">Medium targets · random pattern</div>
+            </div>
+
+            <!-- Tune toggle -->
+            <button class="tune-toggle" id="tune-toggle" onclick="UI.toggleTune()">
+                <span class="chev">▸</span> <span data-i18n="m.tune">Tune</span>
+            </button>
+
+            <!-- Tune panel (accordion) -->
+            <div class="tune-panel" id="tune-panel">
+                <div class="tune-inner">
+                <!-- Duration -->
+                <div class="pgroup">
+                    <div class="plabel" data-i18n="m.duration">Duration</div>
+                    <div class="pbtn-row" id="t-time">
+                        <button class="pb" onclick="UI.setTime(30,this)">30s</button>
+                        <button class="pb on" onclick="UI.setTime(60,this)">60s</button>
+                        <button class="pb" onclick="UI.setTime(90,this)">90s</button>
+                        <button class="pb" onclick="UI.setTime(0,this)">∞</button>
+                    </div>
+                </div>
+
+                <!-- Target size -->
+                <div class="pgroup">
+                    <div class="plabel" data-i18n="m.targetsize">Target size</div>
+                    <div class="pbtn-row" id="t-size">
+                        <button class="pb" onclick="UI.setSize(70,this)" data-i18n="m.large">Large</button>
+                        <button class="pb on" onclick="UI.setSize(48,this)" data-i18n="m.medium">Medium</button>
+                        <button class="pb" onclick="UI.setSize(28,this)" data-i18n="m.precise">Precise</button>
+                    </div>
+                </div>
+
+                <!-- Pattern: genre presets + individual checkboxes -->
+                <div class="pgroup">
+                    <div class="plabel" data-i18n="aim.patterns">Patterns</div>
+                    <div class="pbtn-row" id="t-genre" style="margin-bottom:10px">
+                        <button class="pb" onclick="UI.applyGenre('shooter',this)">🎯 Shooter</button>
+                        <button class="pb" onclick="UI.applyGenre('moba',this)">⚔ MOBA</button>
+                    </div>
+                    <div id="t-pat-checks"></div>
+                </div>
+
+                <!-- ── Advanced ── -->
+                <div class="tune-adv-divider" data-i18n="m.advanced">Advanced</div>
+
+                <!-- Survival mode -->
+                <div class="pgroup">
+                    <div class="plabel" data-i18n="m.challenge">Challenge</div>
+                    <div class="pbtn-row" id="t-challenge">
+                        <button class="pb on" onclick="UI.setChallenge('normal',this)" data-i18n="m.normal">Normal</button>
+                        <button class="pb" onclick="UI.setChallenge('survival',this)" data-i18n="m.survival">Survival — 3 lives</button>
+                    </div>
+                    <div class="mono" style="font-size:9px;color:var(--t3);margin-top:6px;line-height:1.5" id="challenge-hint" data-i18n="aim.hint.normal">
+                        Normal: train freely for the set duration.
+                    </div>
+                </div>
+
+                <!-- Spawn rate -->
+                <div class="pgroup">
+                    <div class="plabel" data-i18n="m.spawnrate">Spawn rate</div>
+                    <div class="slider-wrap">
+                        <span class="mono" style="font-size:9px;color:var(--t3)" data-i18n="m.fast">Slow</span>
+                        <input type="range" id="sl-speed" min="300" max="2000" value="900" step="50" oninput="UI.updateSpeed()">
+                        <span class="mono" style="font-size:9px;color:var(--t3)" data-i18n="m.slow">Slow</span>
+                        <span class="slider-val" id="sl-speed-val">0.9s</span>
+                    </div>
+                    <div class="pcheck inline" id="prog-toggle" style="margin-top:10px" onclick="UI.toggleProg()">
+                        <div class="box"></div><span data-i18n="aim.prog">Progressive — speed up during play</span>
+                    </div>
+                    <button type="button" class="pcheck inline spawn-random-toggle" id="spawn-random-toggle" aria-pressed="false" onclick="UI.toggleSpawnRandom()">
+                        <div class="box"></div><span data-i18n="aim.spawn.random">Variable pace — random interval</span>
+                    </button>
+                    <div class="spawn-random-details" id="spawn-random-details" aria-hidden="true">
+                        <div class="spawn-random-control">
+                            <div class="spawn-random-label">
+                                <span data-i18n="aim.spawn.variance">Variation from the interval</span>
+                                <strong id="sl-spawn-variance-val">±25%</strong>
+                            </div>
+                            <div class="slider-wrap">
+                                <span class="mono" style="font-size:9px;color:var(--t3)">±10%</span>
+                                <input type="range" id="sl-spawn-variance" min="10" max="50" value="25" step="5" disabled oninput="UI.updateSpawnVariance()">
+                                <span class="mono" style="font-size:9px;color:var(--t3)">±50%</span>
+                            </div>
+                            <div class="spawn-range-preview"><span data-i18n="aim.spawn.range">Initial range</span>: <strong id="spawn-range-value">0.68–1.13 s</strong></div>
+                            <div class="spawn-range-note" data-i18n="aim.spawn.note">The chosen interval is the center. Progressive and Survival move the range without changing its proportion.</div>
+                        </div>
+                    </div>
+                </div>
+                </div>
+            </div>
+
+            <div class="aim-custom-actions">
+                <button class="gobtn" type="button" onclick="UI.saveCustomAndStart()" data-i18n="aim.custom.saveStart">Save and start</button>
+                <button class="aim-profile-back" type="button" onclick="UI.showProfiles()" data-i18n="aim.profile.back">Back to profiles</button>
+            </div>
+        </section>
+
+        <button class="gobtn-back" onmouseenter="Snd.tick(660)" onclick="BM.backToHome()" data-i18n="m.back">← BACK TO MENU</button>
+    </div>
+
+    <div class="hint" id="setup-hint" data-i18n="aim.setuphint">Click targets. Destroy everything. Don't miss.</div>
+</div>
+
+<!-- ═══ RESULTS ═══ -->
+<div class="res hide" id="res">
+    <div class="rcard">
+        <div class="hl" style="text-align:center;margin-bottom:10px" id="r-mode" data-i18n="m.complete">SESSION COMPLETE</div>
+
+        <!-- Primary metric: hits per second -->
+        <div class="res-metric">
+            <span class="res-metric-value" id="r-primary">0</span><span class="res-metric-unit">/seg</span>
+            <div class="res-metric-label" data-i18n="aim.metric">Hits per second</div>
+        </div>
+
+        <!-- Comparison to personal best -->
+        <div class="res-compare" id="r-compare"></div>
+
+        <!-- Evolution chart -->
+        <div class="res-evo">
+            <div class="res-evo-title"><span data-i18n="m.recent">Recent sessions</span><span id="r-evo-best"></span></div>
+            <div class="res-evo-bars" id="r-evo-bars"></div>
+        </div>
+
+        <!-- Secondary details -->
+        <div class="res-details" id="r-details"></div>
+
+        <div class="rbtns">
+            <button class="rb-s" onclick="location.href='../index.html'" data-i18n="m.exit">EXIT</button>
+            <button class="rb-s" onclick="Game.toSetup()" data-i18n="m.menu">MENU</button>
+            <button class="rb-p" onclick="Game.retry()" data-i18n="m.retry">RETRY</button>
+        </div>
+    </div>
+</div>
+
+<script src="../assets/i18n.js"></script>
+<script src="../assets/shared.js"></script>
+<script src="../assets/history.js"></script>
+<script src="../assets/training-core.js"></script>
+<script src="../assets/routine.js"></script>
+<script src="../assets/experience.js"></script>
+<script>
+const MODULE = 'aim';
+
+// ═══ PATTERNS ═══
+const PATTERNS = [
+    {id:'random',  name:'Random',         desc:'Appear anywhere — trains flicks'},
+    {id:'sides',   name:'Sides',          desc:'Enter from screen edges — trains peeks'},
+    {id:'circle',  name:'Cursor Circle',  desc:'Spawn near cursor — trains microadjust'},
+    {id:'hv',      name:'Moving H/V',     desc:'Move in a line — trains linear skillshots'},
+    {id:'bounce',  name:'Bounce',         desc:'Move and bounce — trains erratic tracking'},
+];
+
+// Genre presets: which patterns each playstyle benefits from training.
+// These are SHORTCUTS — they tick the relevant checkboxes. The user can
+// then add/remove individual patterns freely.
+const GENRE_PRESETS = {
+    shooter: ['random', 'sides', 'circle'],   // flicks + peeks + microadjust
+    moba:    ['hv', 'bounce', 'circle']        // linear + erratic skillshots + close
+};
+
+// One-click profiles are complete, deliberate setups. The custom profile is
+// stored separately so launching Shooter or MOBA never overwrites it.
+const AIM_PROFILE_CONFIGS = {
+    shooter: {time:60,size:48,patterns:[...GENRE_PRESETS.shooter],challenge:'normal',speed:750,progOn:false,spawnRandom:true,spawnVariance:20},
+    moba:    {time:60,size:48,patterns:[...GENRE_PRESETS.moba],challenge:'normal',speed:900,progOn:false,spawnRandom:true,spawnVariance:25}
+};
+const AIM_CUSTOM_KEY = 'aimCustomPreset:v1';
+
+// ═══ UI ═══
+// Single config object — no more separate survival/standard/custom states.
+const UI = {
+    time: 60,           // duration in seconds (0 = infinite)
+    size: 48,           // target diameter px
+    patterns: ['random'],   // active pattern ids (≥1 enforced)
+    activeGenre: '',    // '' | 'shooter' | 'moba' — which preset is exactly matched
+    challenge: 'normal',    // 'normal' | 'survival'
+    speed: 900,         // spawn rate ms
+    progOn: false,
+    spawnRandom: false,
+    spawnVariance: 25,
+    tuneOpen: false,
+    _routineMode: false,
+    _activeProfile: '',
+
+    toggleTune(){
+        this.setTune(!this.tuneOpen);
+        Snd.tick(622);
+    },
+
+    setTune(open){
+        this.tuneOpen = !!open;
+        document.getElementById('tune-toggle').classList.toggle('open', this.tuneOpen);
+        document.getElementById('tune-panel').classList.toggle('open', this.tuneOpen);
+    },
+
+    profileConfig(input=this){
+        const ids = new Set(PATTERNS.map(p=>p.id));
+        const source = input && typeof input === 'object' ? input : {};
+        const patterns = Array.isArray(source.patterns) ? [...new Set(source.patterns.filter(p=>ids.has(p)))] : [];
+        const time = [0,30,60,90].includes(Number(source.time)) ? Number(source.time) : 60;
+        const rawSize = Number(source.size), rawSpeed = Number(source.speed), rawVariance = Number(source.spawnVariance);
+        return {
+            time,
+            size: Number.isFinite(rawSize) ? Math.max(20,Math.min(100,Math.round(rawSize))) : 48,
+            patterns: patterns.length ? patterns : ['random'],
+            challenge: source.challenge === 'survival' ? 'survival' : 'normal',
+            speed: Number.isFinite(rawSpeed) ? Math.max(300,Math.min(2000,Math.round(rawSpeed/50)*50)) : 900,
+            progOn: source.progOn === true,
+            spawnRandom: source.spawnRandom === true,
+            spawnVariance: Number.isFinite(rawVariance) ? Math.max(10,Math.min(50,Math.round(rawVariance/5)*5)) : 25
+        };
+    },
+
+    readCustom(){
+        const stored = Store.getGlobal(AIM_CUSTOM_KEY);
+        return stored && typeof stored === 'object' ? this.profileConfig(stored) : null;
+    },
+
+    applyProfile(profile,name='custom'){
+        const clean = this.profileConfig(profile);
+        Object.entries(clean).forEach(([key,value])=>{this[key]=Array.isArray(value)?[...value]:value});
+        this._activeProfile = name;
+        BM.syncConfigUI(this);
+        return clean;
+    },
+
+    profileMeta(profile){
+        const cfg = this.profileConfig(profile);
+        const duration = cfg.challenge === 'survival' ? I18N.t('m.survival').split(' —')[0] : cfg.time === 0 ? I18N.t('m.endless') : `${cfg.time} s`;
+        const size = cfg.size === 70 ? I18N.t('m.large') : cfg.size === 48 ? I18N.t('m.medium') : cfg.size === 28 ? I18N.t('m.precise') : `${cfg.size} px`;
+        const base = cfg.challenge === 'survival' ? 1100 : cfg.speed;
+        const pace = (base/1000).toFixed(2).replace(/0+$/,'').replace(/\.$/,'') + ' s';
+        const variable = cfg.spawnRandom ? ` · ±${cfg.spawnVariance}%` : '';
+        return `${duration} · ${size} · ${pace}${variable}`;
+    },
+
+    refreshProfileCards(){
+        const shooter = document.getElementById('aim-shooter-meta');
+        const moba = document.getElementById('aim-moba-meta');
+        if(shooter) shooter.textContent = this.profileMeta(AIM_PROFILE_CONFIGS.shooter);
+        if(moba) moba.textContent = this.profileMeta(AIM_PROFILE_CONFIGS.moba);
+        const saved = this.readCustom();
+        const customMeta = document.getElementById('aim-custom-meta');
+        const customDesc = document.getElementById('aim-custom-desc');
+        const customCta = document.getElementById('aim-custom-cta');
+        const customEdit = document.getElementById('aim-custom-edit');
+        if(customMeta) customMeta.textContent = saved ? this.profileMeta(saved) : I18N.t('aim.profile.not.saved');
+        if(customDesc) customDesc.textContent = I18N.t(saved ? 'aim.profile.custom.ready' : 'aim.profile.custom.empty');
+        if(customCta) customCta.textContent = I18N.t(saved ? 'aim.profile.start' : 'aim.profile.configure');
+        if(customEdit) customEdit.textContent = I18N.t(saved ? 'aim.profile.edit' : 'aim.profile.configure.short');
+        const state = document.getElementById('aim-custom-save-state');
+        if(state) state.textContent = I18N.t(saved ? 'aim.custom.savedlocal' : 'aim.custom.unsaved');
+    },
+
+    startProfile(name){
+        const profile = name === 'custom' ? this.readCustom() : AIM_PROFILE_CONFIGS[name];
+        if(!profile){this.editCustom();return;}
+        this.applyProfile(profile,name);
+        Game.launch();
+    },
+
+    editCustom(){
+        const saved = this.readCustom();
+        if(saved) this.applyProfile(saved,'custom');
+        this._activeProfile = 'custom';
+        const stage = document.getElementById('aim-profile-stage');
+        const workspace = document.getElementById('aim-custom-workspace');
+        if(stage) stage.hidden = true;
+        if(workspace) workspace.hidden = false;
+        this.setTune(true);
+        this.refreshSummary();
+        this.refreshProfileCards();
+    },
+
+    showProfiles(){
+        if(this._routineMode) return;
+        const stage = document.getElementById('aim-profile-stage');
+        const workspace = document.getElementById('aim-custom-workspace');
+        if(stage) stage.hidden = false;
+        if(workspace) workspace.hidden = true;
+        this.setTune(false);
+        this.refreshProfileCards();
+    },
+
+    saveCustomAndStart(){
+        if(this._routineMode){Game.launch();return;}
+        const profile = this.profileConfig(this);
+        Store.setGlobal(AIM_CUSTOM_KEY,profile);
+        this._activeProfile = 'custom';
+        this.refreshProfileCards();
+        Game.launch();
+    },
+
+    initProfiles(){
+        this._routineMode = !!BM.Routine?.context(MODULE);
+        this.refreshProfileCards();
+        if(this._routineMode){
+            const stage = document.getElementById('aim-profile-stage');
+            const workspace = document.getElementById('aim-custom-workspace');
+            if(stage) stage.hidden = true;
+            if(workspace) workspace.hidden = false;
+            this.setTune(false);
+        }else this.showProfiles();
+    },
+
+    setTime(v, btn){ this.time = v; BM.selectPb(btn); this.refreshSummary(); },
+    setSize(v, btn){ this.size = v; BM.selectPb(btn); this.refreshSummary(); },
+
+    // Apply a genre preset — ticks exactly the patterns for that genre
+    applyGenre(genre, btn){
+        this.patterns = [...GENRE_PRESETS[genre]];
+        this.activeGenre = genre;
+        // Visual: highlight the active genre button, clear the other
+        document.querySelectorAll('#t-genre .pb').forEach(b => b.classList.remove('on'));
+        btn.classList.add('on');
+        this.buildPatternChecks();
+        this.refreshSummary();
+        Snd.tick(622);
+    },
+
+    // Toggle an individual pattern checkbox
+    togglePattern(id){
+        const idx = this.patterns.indexOf(id);
+        if(idx > -1){
+            if(this.patterns.length > 1) this.patterns.splice(idx, 1);  // keep ≥1
+        } else {
+            this.patterns.push(id);
+        }
+        // Manual edit means it may no longer match a genre preset exactly
+        this.syncGenreHighlight();
+        this.buildPatternChecks();
+        this.refreshSummary();
+    },
+
+    // After a manual edit, check if the current selection still equals a
+    // genre preset. If so, keep that genre highlighted; if not, clear it.
+    syncGenreHighlight(){
+        const sorted = [...this.patterns].sort().join(',');
+        let matched = '';
+        for(const [g, pats] of Object.entries(GENRE_PRESETS)){
+            if([...pats].sort().join(',') === sorted){ matched = g; break; }
+        }
+        this.activeGenre = matched;
+        document.querySelectorAll('#t-genre .pb').forEach(b => {
+            const g = b.getAttribute('onclick').match(/'(\w+)'/)[1];
+            b.classList.toggle('on', g === matched);
+        });
+    },
+
+    buildPatternChecks(){
+        const c = document.getElementById('t-pat-checks');
+        if(!c) return;
+        c.innerHTML = '';
+        PATTERNS.forEach(p => {
+            const on = this.patterns.includes(p.id);
+            const d = document.createElement('div');
+            d.className = 'pcheck' + (on ? ' on' : '');
+            d.innerHTML = `<div class="box">${on ? '✓' : ''}</div><span>${p.name}</span>`;
+            d.onclick = () => { Snd.tick(560); this.togglePattern(p.id); };
+            c.appendChild(d);
+            const desc = document.createElement('div');
+            desc.className = 'pcheck-desc';
+            desc.textContent = p.desc;
+            c.appendChild(desc);
+        });
+    },
+
+    setChallenge(c, btn){
+        this.challenge = c;
+        BM.selectPb(btn);
+        const hint = document.getElementById('challenge-hint');
+        hint.textContent = c === 'survival' ? I18N.t('aim.hint.surv') : I18N.t('aim.hint.normal');
+        this.updateSpawnRange();
+        this.refreshSummary();
+    },
+
+    updateSpeed(){
+        const v = document.getElementById('sl-speed').value;
+        this.speed = parseInt(v);
+        document.getElementById('sl-speed-val').textContent = (v/1000).toFixed(1) + 's';
+        this.updateSpawnRange();
+        this.refreshSummary();
+    },
+
+    toggleProg(){
+        this.progOn = !this.progOn;
+        this.syncProgToggle();
+        this.refreshSummary();
+    },
+
+    syncProgToggle(){
+        const t = document.getElementById('prog-toggle');
+        if(!t) return;
+        t.classList.toggle('on', this.progOn);
+        t.querySelector('.box').textContent = this.progOn ? '✓' : '';
+    },
+
+    toggleSpawnRandom(){
+        this.spawnRandom = !this.spawnRandom;
+        this.syncSpawnRandomToggle();
+        this.refreshSummary();
+        Snd.tick(622);
+    },
+
+    syncSpawnRandomToggle(){
+        const toggle = document.getElementById('spawn-random-toggle');
+        const details = document.getElementById('spawn-random-details');
+        const slider = document.getElementById('sl-spawn-variance');
+        if(toggle){
+            toggle.classList.toggle('on', this.spawnRandom);
+            toggle.setAttribute('aria-pressed', String(this.spawnRandom));
+            toggle.querySelector('.box').textContent = this.spawnRandom ? '✓' : '';
+        }
+        if(details){
+            details.classList.toggle('on', this.spawnRandom);
+            details.setAttribute('aria-hidden', String(!this.spawnRandom));
+        }
+        if(slider) slider.disabled = !this.spawnRandom;
+        this.updateSpawnRange();
+    },
+
+    updateSpawnVariance(){
+        const slider = document.getElementById('sl-spawn-variance');
+        if(slider) this.spawnVariance = parseInt(slider.value);
+        const value = document.getElementById('sl-spawn-variance-val');
+        if(value) value.textContent = `±${this.spawnVariance}%`;
+        this.updateSpawnRange();
+        this.refreshSummary();
+    },
+
+    spawnBounds(base){
+        const safeBase = Math.max(150, Number(base) || 900);
+        const requested = safeBase * Math.max(0, Math.min(50, this.spawnVariance)) / 100;
+        const spread = Math.min(requested, safeBase - 150);
+        return [Math.round(safeBase - spread), Math.round(safeBase + spread)];
+    },
+
+    formatSpawn(ms){
+        return (ms / 1000).toFixed(2).replace(/0$/, '') + ' s';
+    },
+
+    updateSpawnRange(){
+        const preview = document.getElementById('spawn-range-value');
+        if(!preview) return;
+        const base = this.challenge === 'survival' ? 1100 : this.speed;
+        const [min,max] = this.spawnBounds(base);
+        preview.textContent = `${this.formatSpawn(min)}–${this.formatSpawn(max)}`;
+    },
+
+    // Updates the big "recommended mode" display to reflect current config
+    refreshSummary(){
+        const sizeLabel = this.size === 70 ? I18N.t('m.large') : this.size === 48 ? I18N.t('m.medium') : I18N.t('m.precise');
+        // Describe the pattern selection: genre name if matched, else count
+        let patLabel;
+        if(this.activeGenre === 'shooter') patLabel = I18N.t('aim.pat.shooter');
+        else if(this.activeGenre === 'moba') patLabel = I18N.t('aim.pat.moba');
+        else if(this.patterns.length === 1) patLabel = PATTERNS.find(p => p.id === this.patterns[0]).name.toLowerCase();
+        else patLabel = this.patterns.length + ' ' + I18N.t('aim.pat.n');
+
+        const valueEl = document.getElementById('qs-mode-value');
+        const subEl = document.getElementById('qs-mode-sub');
+        const tg = I18N.t('aim.targets');
+        const variable = this.spawnRandom ? ` · ${I18N.t('aim.spawn.variable')} ±${this.spawnVariance}%` : '';
+
+        if(this.challenge === 'survival'){
+            valueEl.textContent = I18N.t('m.survival').split(' —')[0];  // "Survival"/"Supervivencia"
+            subEl.textContent = `${sizeLabel} ${tg} · ${I18N.t('aim.lives3')} · ${patLabel}${variable}`;
+        } else {
+            valueEl.textContent = this.time === 0 ? I18N.t('m.endless') : this.time + (I18N.lang==='es'?' segundos':' seconds');
+            subEl.textContent = `${sizeLabel} ${tg} · ${patLabel}${variable}`;
+        }
+    },
+
+    getPatterns(){ return [...this.patterns]; }
+};
+
+// Aim-specific feedback. Each cue is rendered once into a tiny buffer and
+// reused, so rapid sessions create only one short-lived source per event.
+const AimAudio = {
+    buffers:null, context:null,
+
+    sample(kind){
+        const ctx=Snd.ctx;
+        if(!ctx)return null;
+        if(this.context!==ctx){this.context=ctx;this.buffers=Object.create(null);}
+        if(this.buffers[kind])return this.buffers[kind];
+        const hit=kind==='hit',duration=hit ? .036 : .048;
+        const length=Math.max(1,Math.floor(ctx.sampleRate*duration));
+        const buffer=ctx.createBuffer(1,length,ctx.sampleRate);
+        const data=buffer.getChannelData(0);
+        let phase=0,harmonicPhase=0,seed=hit ? 1731 : 6139,lastNoise=0,filteredNoise=0;
+        for(let i=0;i<length;i++){
+            const t=i/ctx.sampleRate,position=i/Math.max(1,length-1);
+            const frequency=hit ? 1480-760*position : 410-190*position;
+            phase+=Math.PI*2*frequency/ctx.sampleRate;
+            harmonicPhase+=Math.PI*2*frequency*2.07/ctx.sampleRate;
+            seed=(seed*1664525+1013904223)>>>0;
+            const noise=(seed/4294967295)*2-1;
+            filteredNoise+=(noise-filteredNoise)*(hit ? .3 : .16);
+            const attack=(noise-lastNoise)*Math.exp(-t*(hit ? 330 : 180));
+            const puff=filteredNoise*Math.exp(-t*(hit ? 100 : 62));
+            const digital=(Math.sin(phase)+Math.sin(harmonicPhase)*(hit ? .16 : .07))*Math.exp(-t*(hit ? 116 : 70));
+            const fadeIn=Math.min(1,t/.00065),fadeOut=Math.min(1,(duration-t)/.006);
+            const shaped=hit
+                ? attack*.105+puff*.18+digital*.29
+                : attack*.055+puff*.2+digital*.23;
+            data[i]=Math.max(-1,Math.min(1,shaped*fadeIn*fadeOut));
+            lastNoise=noise;
+        }
+        this.buffers[kind]=buffer;return buffer;
+    },
+
+    play(kind,rate=1){
+        if(!Snd.on||!Snd.ctx)return;
+        if(Snd._wake&&!Snd._wake())return;
+        const buffer=this.sample(kind);if(!buffer)return;
+        const source=Snd.ctx.createBufferSource();
+        source.buffer=buffer;
+        source.playbackRate.setValueAtTime(rate,Snd.ctx.currentTime);
+        source.connect(Snd._out());
+        source.onended=()=>{try{source.disconnect()}catch{}};
+        source.start();
+    },
+
+    hit(streak=0){
+        this.play('hit',1+Math.min(30,Math.max(0,streak))*.002);
+    },
+
+    error(){this.play('error',1);},
+
+    speedUp(){
+        if(!Snd.on||!Snd.ctx)return;
+        if(Snd._wake&&!Snd._wake())return;
+        const ctx=Snd.ctx,t=ctx.currentTime,osc=ctx.createOscillator(),gain=ctx.createGain();
+        osc.type='triangle';
+        osc.frequency.setValueAtTime(660,t);
+        osc.frequency.setValueAtTime(980,t+.095);
+        gain.gain.setValueAtTime(.001,t);
+        gain.gain.linearRampToValueAtTime(.085,t+.006);
+        gain.gain.exponentialRampToValueAtTime(.001,t+.065);
+        gain.gain.setValueAtTime(.001,t+.09);
+        gain.gain.linearRampToValueAtTime(.075,t+.098);
+        gain.gain.exponentialRampToValueAtTime(.001,t+.18);
+        osc.connect(gain);gain.connect(Snd._out());
+        osc.onended=()=>{try{osc.disconnect();gain.disconnect()}catch{}};
+        osc.start(t);osc.stop(t+.19);
+    }
+};
+
+// ═══ GAME ═══
+const Game = {
+    mode:'', active:false, paused:false,
+    score:0, clicks:0, hits:0, streak:0, maxStreak:0,
+    lives:0, maxLives:0, timeLeft:0, elapsed:0,
+    cfg:{patterns:[],spawnMs:1000,size:48,theyShoot:false,timed:true,duration:60,progressive:false,progEvery:10,spawnRandom:false,spawnVariance:25},
+    spawnT:null, timerI:null, _elI:null, boostT:null, moveTargets:[], mouseX:0, mouseY:0, lastMode:'',
+    qs:null,  // quick switcher instance
+
+    launch(){
+        Snd.init();
+        // Derive mode from challenge setting
+        const mode = UI.challenge === 'survival' ? 'survival' : 'normal';
+        this.mode=mode; this.lastMode=mode;
+        this.score=0;this.clicks=0;this.hits=0;this.streak=0;this.maxStreak=0;this.elapsed=0;
+        this.moveTargets=[];
+        this.paused=false;
+
+        if(mode==='survival'){
+            this.cfg={
+                patterns: UI.getPatterns(),
+                spawnMs: 1100,
+                size: UI.size,
+                theyShoot: true, timed: false, duration: 0,
+                progressive: false, progEvery: 10,
+                spawnRandom: UI.spawnRandom, spawnVariance: UI.spawnVariance
+            };
+            this.lives=3;this.maxLives=3;
+        } else {
+            const isTimed = UI.time !== 0;
+            this.cfg={
+                patterns: UI.getPatterns(),
+                spawnMs: UI.speed,
+                size: UI.size,
+                theyShoot: false, timed: isTimed,
+                duration: isTimed ? UI.time : 0,
+                progressive: UI.progOn, progEvery: 10,
+                spawnRandom: UI.spawnRandom, spawnVariance: UI.spawnVariance
+            };
+            this.lives=0;this.maxLives=0;
+        }
+
+        this.timeLeft=this.cfg.duration;
+        this.active=true;
+
+        document.getElementById('setup').classList.add('hide');
+        document.getElementById('res').classList.add('hide');
+        document.getElementById('hud').classList.add('on');
+        document.getElementById('xhair').style.display='block';
+        document.body.style.cursor='none';
+        document.getElementById('arena').innerHTML='';
+
+        document.getElementById('h-tm').textContent=this.cfg.timed?this.timeLeft:'∞';
+        document.getElementById('h-tdot').style.background=mode==='survival'?'var(--miss)':'var(--accent)';
+        BM.drawLives('#h-lives',this.lives,this.maxLives);
+        BM.buildPips('#stbar',this.cfg.progEvery);
+        const progress=document.getElementById('stwrap');
+        progress.classList.remove('boost','max');
+        this.updateProgressHUD();
+        this.updateHUD();
+        this.scheduleSpawn();
+        if(this.cfg.timed) this.startTimer();
+        this.startElapsed();
+        this.moveLoop();
+
+        // Show quick-switcher pause button
+        if(this.qs && this.qs.btn) this.qs.btn.classList.add('on');
+
+        document.getElementById('arena').onmousedown=(e)=>{
+            if(!this.active || this.paused)return;
+            if(e.target===document.getElementById('arena')||!e.target.closest('.tgt')){
+                this.onMiss(e.clientX,e.clientY);
+            }
+        };
+    },
+
+    // ── Pause / Resume (called by quick switcher) ──
+    pause(){
+        if(!this.active || this.paused)return;
+        this.paused=true;
+        this.scheduler.clear(this.spawnT);
+        this.scheduler.clear(this.timerI);
+        this.scheduler.clear(this._elI);
+        this.scheduler.clear(this.boostT);this.boostT=null;
+        document.getElementById('stwrap').classList.remove('boost');
+        this.updateProgressHUD();
+        // Suspend tick rings on tickin' targets so they don't expire while paused
+        document.querySelectorAll('.tgt.ticking .tgt-timer').forEach(r=>{r.style.animationPlayState='paused'});
+        document.querySelectorAll('.tgt.ticking').forEach(t=>{
+            if(t._timeout){this.scheduler.clear(t._timeout);t._pausedAt=this.clock.now()}
+        });
+        document.body.style.cursor='default';
+        document.getElementById('xhair').style.display='none';
+    },
+    resume(){
+        if(!this.active || !this.paused)return;
+        this.paused=false;
+        // Restart spawn
+        this.scheduleSpawn();
+        // Restart timer with remaining time
+        if(this.cfg.timed && this.timeLeft>0) this.startTimer();
+        this.startElapsed();
+        // Restart move loop
+        this.moveLoop();
+        // Resume ticking targets — reschedule kills with same remaining time as approximation
+        document.querySelectorAll('.tgt.ticking .tgt-timer').forEach(r=>{r.style.animationPlayState='running'});
+        document.querySelectorAll('.tgt.ticking').forEach(t=>{
+            // Give them a fresh 2s lease — conservative, avoids juggling exact remaining
+            t._timeout=this.scheduler.setTimeout(()=>{if(t.parentNode){t.remove();this.loseLife()}},2000);
+        });
+        document.body.style.cursor='none';
+        document.getElementById('xhair').style.display='block';
+    },
+    exit(){
+        // Called when navigating away — make sure nothing leaks
+        this.active=false;this.paused=false;
+        this.scheduler.clear(this.spawnT);this.scheduler.clear(this.timerI);this.scheduler.clear(this._elI);
+        this.scheduler.clear(this.boostT);this.boostT=null;
+        document.getElementById('stwrap').classList.remove('on','boost','max');
+        document.body.style.cursor='default';
+    },
+
+    retry(){this.launch()},
+    toSetup(){
+        document.getElementById('res').classList.add('hide');
+        document.getElementById('setup').classList.remove('hide');
+        if(this.qs && this.qs.btn) this.qs.btn.classList.remove('on');
+        if(UI._routineMode){
+            document.getElementById('aim-custom-workspace').hidden=false;
+        }else UI.showProfiles();
+    },
+
+    getBaseSpawnMs(){
+        if(this.mode==='survival'){
+            const reduction=Math.floor(this.hits/10)*100;
+            return Math.max(300,1100-reduction);
+        }
+        // Custom progressive: speed up every progEvery hits
+        if(this.cfg.progressive && this.cfg.progEvery>0){
+            const steps=Math.floor(this.hits/this.cfg.progEvery);
+            return Math.max(200, this.cfg.spawnMs - steps*50);
+        }
+        return this.cfg.spawnMs;
+    },
+
+    getSpawnMs(){
+        const base = this.getBaseSpawnMs();
+        if(!this.cfg.spawnRandom) return base;
+        const variance = Math.max(0, Math.min(50, Number(this.cfg.spawnVariance) || 0));
+        // Keep the range centered on the effective interval. At extreme speeds,
+        // shrink both sides equally so the scheduler never drops below 150 ms.
+        const spread = Math.min(base * variance / 100, base - 150);
+        return Math.round(base - spread + Math.random() * spread * 2);
+    },
+
+    updateProgressHUD(previousBase){
+        const wrap=document.getElementById('stwrap'),bar=document.getElementById('stbar');
+        const label=document.getElementById('stval'),name=document.getElementById('speed-progress-name');
+        const live=document.getElementById('speed-progress-live');
+        const enabled=!!(this.active&&(this.cfg.progressive||this.mode==='survival')&&this.cfg.progEvery>0);
+        wrap.classList.toggle('on',enabled);wrap.setAttribute('aria-hidden',String(!enabled));
+        if(!enabled){wrap.classList.remove('boost','max');if(live)live.textContent='';return false;}
+        const currentBase=this.getBaseSpawnMs();
+        const spedUp=Number.isFinite(previousBase)&&currentBase<previousBase;
+        const atMax=currentBase<=(this.mode==='survival'?300:200);
+        const progress=spedUp ? 0 : (atMax ? this.cfg.progEvery : this.hits%this.cfg.progEvery);
+        bar.setAttribute('aria-valuemax',String(this.cfg.progEvery));
+        bar.setAttribute('aria-valuenow',String(progress));
+        bar.setAttribute('aria-label',I18N.t('aim.speed.aria'));
+        bar.querySelectorAll('.spip').forEach((pip,index)=>pip.classList.toggle('a',index<progress));
+        label.textContent=spedUp?`0/${this.cfg.progEvery}`:(atMax?I18N.t('aim.speed.max.short'):`${progress}/${this.cfg.progEvery}`);
+        wrap.classList.toggle('max',atMax&&!spedUp);
+        if(spedUp){
+            wrap.classList.remove('max');wrap.classList.add('boost');
+            name.textContent=I18N.t('aim.speed.up');
+            if(live)live.textContent=I18N.t('aim.speed.announcement').replace('{ms}',String(currentBase));
+            AimAudio.speedUp();
+            this.scheduler.clear(this.boostT);
+            this.boostT=this.scheduler.setTimeout(()=>{
+                this.boostT=null;wrap.classList.remove('boost');
+                if(this.active)this.updateProgressHUD();
+            },700);
+        }else if(!wrap.classList.contains('boost')){
+            name.textContent=I18N.t(atMax?'aim.speed.max':'aim.speed.next');
+        }
+        return spedUp;
+    },
+
+    scheduleSpawn(){
+        if(!this.active || this.paused)return;
+        this.spawnTarget();
+        this.spawnT=this.scheduler.setTimeout(()=>this.scheduleSpawn(),this.getSpawnMs());
+    },
+
+    spawnTarget(){
+        if(!this.active)return;
+        const pat=this.cfg.patterns[Math.floor(Math.random()*this.cfg.patterns.length)];
+        const size=this.cfg.size;
+        const arena=document.getElementById('arena');
+        const dt=this.clock.step("motion")*60;
+        const W=window.innerWidth,H=window.innerHeight;
+        const pad=60;
+
+        if(pat==='hv'||pat==='bounce'){
+            this.spawnMoving(pat,size);return;
+        }
+
+        const t=document.createElement('div');
+        t.className='tgt';
+        t.style.width=size+'px';t.style.height=size+'px';
+
+        let x,y;
+        if(pat==='random'){
+            x=pad+Math.random()*(W-pad*2);y=pad+Math.random()*(H-pad*2);
+        } else if(pat==='sides'){
+            const side=Math.floor(Math.random()*4);
+            if(side===0){x=pad;y=pad+Math.random()*(H-pad*2)}
+            else if(side===1){x=W-pad;y=pad+Math.random()*(H-pad*2)}
+            else if(side===2){x=pad+Math.random()*(W-pad*2);y=pad}
+            else{x=pad+Math.random()*(W-pad*2);y=H-pad}
+        } else if(pat==='circle'){
+            const angle=Math.random()*Math.PI*2;
+            const dist=80+Math.random()*120;
+            x=Math.max(pad,Math.min(W-pad,this.mouseX+Math.cos(angle)*dist));
+            y=Math.max(pad,Math.min(H-pad,this.mouseY+Math.sin(angle)*dist));
+        } else {
+            x=pad+Math.random()*(W-pad*2);y=pad+Math.random()*(H-pad*2);
+        }
+
+        t.style.left=x+'px';t.style.top=y+'px';
+        t.innerHTML='<div class="tgt-r"><div class="tgt-c"></div></div><div class="tgt-timer"></div>';
+
+        t.onmousedown=(e)=>{e.stopPropagation();this.onHit(t,e.clientX,e.clientY)};
+        t.dataset.born=this.clock.now();
+        arena.appendChild(t);
+
+        if(this.cfg.theyShoot){
+            t.classList.add('ticking');
+            t.style.setProperty('--life','2s');
+            t._timeout=this.scheduler.setTimeout(()=>{if(t.parentNode){t.remove();this.loseLife()}},2000);
+        }
+    },
+
+    spawnMoving(pat,size){
+        const arena=document.getElementById('arena');
+        const dt=this.clock.step("motion")*60;
+        const W=window.innerWidth,H=window.innerHeight;
+        const t=document.createElement('div');
+        t.className='tgt';
+        t.style.width=size+'px';t.style.height=size+'px';
+        t.innerHTML='<div class="tgt-r"><div class="tgt-c"></div></div>';
+
+        let x=100+Math.random()*(W-200),y=100+Math.random()*(H-200);
+        let vx,vy;
+        const speed=2+Math.random()*2;
+
+        if(pat==='hv'){
+            if(Math.random()>.5){vx=speed;vy=0}else{vx=0;vy=speed}
+        } else {
+            const angle=Math.random()*Math.PI*2;
+            vx=Math.cos(angle)*speed;vy=Math.sin(angle)*speed;
+        }
+
+        t.style.left=x+'px';t.style.top=y+'px';
+        t.onmousedown=(e)=>{
+            e.stopPropagation();
+            this.moveTargets=this.moveTargets.filter(m=>m.el!==t);
+            this.onHit(t,e.clientX,e.clientY);
+        };
+        t.dataset.born=this.clock.now();
+        arena.appendChild(t);
+        const mt={el:t,x,y,vx,vy};
+        this.moveTargets.push(mt);
+
+        if(this.cfg.theyShoot){
+            t.classList.add('ticking');t.style.setProperty('--life','3s');
+            t._timeout=this.scheduler.setTimeout(()=>{if(t.parentNode){t.remove();this.moveTargets=this.moveTargets.filter(m=>m.el!==t);this.loseLife()}},3000);
+        }
+    },
+
+    moveLoop(){
+        if(!this.active || this.paused)return;
+        const dt=this.clock.step("motion")*60;
+        const W=window.innerWidth,H=window.innerHeight;
+        this.moveTargets.forEach(m=>{
+            m.x+=m.vx*dt;m.y+=m.vy*dt;
+            if(m.x<30||m.x>W-30)m.vx*=-1;
+            if(m.y<30||m.y>H-30)m.vy*=-1;
+            m.el.style.left=m.x+'px';m.el.style.top=m.y+'px';
+        });
+        this.scheduler.requestAnimationFrame(()=>this.moveLoop());
+    },
+
+    onHit(el,x,y){
+        if(!this.active || this.paused)return;
+        const previousBase=this.getBaseSpawnMs();
+        this.scheduler.clear(el._timeout);
+        const rt=Math.round(this.clock.now()-parseFloat(el.dataset.born));
+        el.remove();
+        this.hits++;this.clicks++;this.streak++;
+        if(this.streak>this.maxStreak)this.maxStreak=this.streak;
+        this.score+=100+this.streak*5;
+
+        if(this.mode==='survival'&&this.hits%100===0&&this.lives<this.maxLives){
+            this.lives++;Snd.life();
+        }
+
+        const arena=document.getElementById('arena');
+        BM.fxHit(arena,x,y);
+        BM.fxScore(arena,x,y,rt+'ms',rt<300?'var(--hit)':rt<600?'var(--warn)':'var(--t2)');
+
+        AimAudio.hit(this.streak);
+        this.updateProgressHUD(previousBase);
+        BM.drawLives('#h-lives',this.lives,this.maxLives);
+        this.updateHUD();
+    },
+
+    onMiss(x,y){
+        if(this.paused)return;
+        this.clicks++;this.streak=0;
+        BM.fxMiss(document.getElementById('arena'),x,y);
+        if(this.cfg.theyShoot||this.mode==='survival') this.loseLife();
+        else AimAudio.error();
+        this.updateHUD();
+    },
+
+    loseLife(){
+        if(this.lives<=0)return;
+        this.lives--;this.streak=0;
+        BM.drawLives('#h-lives',this.lives,this.maxLives);
+        AimAudio.error();
+        document.getElementById('arena').style.boxShadow='inset 0 0 80px rgba(255,34,85,0.3)';
+        this.scheduler.setTimeout(()=>document.getElementById('arena').style.boxShadow='none',200);
+        if(this.lives<=0) this.end();
+    },
+
+    updateHUD(){
+        document.getElementById('h-sc').textContent=this.score;
+        if(this.cfg.timed) document.getElementById('h-tm').textContent=this.timeLeft;
+        const acc=this.clicks===0?0:Math.round(this.hits/this.clicks*100);
+        document.getElementById('h-ac').textContent=acc+'%';
+    },
+
+    startTimer(){
+        this.timerI=this.scheduler.setInterval(()=>{
+            this.timeLeft=Math.max(0,Math.ceil(this.sessionDuration-this.clock.now()/1000-(this.timePenalty||0)));this.updateHUD();
+            if(this.timeLeft<=0) this.end();
+        },1000);
+    },
+
+    startElapsed(){
+        this._elI=this.scheduler.setInterval(()=>{if(this.active)this.elapsed=Math.floor(this.clock.now()/1000)},1000);
+    },
+
+    end(){
+        this.active=false;this.paused=false;
+        this.scheduler.clear(this.timerI);this.scheduler.clear(this._elI);this.scheduler.clear(this.spawnT);this.scheduler.clear(this.boostT);this.boostT=null;
+        this.moveTargets=[];
+        document.getElementById('arena').innerHTML='';
+        document.body.style.cursor='default';
+        document.getElementById('xhair').style.display='none';
+        document.getElementById('hud').classList.remove('on');
+        document.getElementById('stwrap').classList.remove('on');
+        if(this.qs && this.qs.btn) this.qs.btn.classList.remove('on');
+
+        const dur=Math.max(.001,this.clock.now()/1000);
+        const acc=this.clicks===0?0:Math.round(this.hits/this.clicks*100);
+        const hps=dur>0?(this.hits/dur):0;          // hits per second — the primary metric
+        const hpsStr=hps.toFixed(2);
+
+        document.getElementById('r-mode').textContent =
+            this.mode==='survival' ? I18N.t('m.res.survover') : I18N.t('m.complete');
+
+        // ── Primary metric ──
+        document.getElementById('r-primary').textContent = hpsStr;
+
+        // ── Persist BEFORE comparison so we compare against prior bests ──
+        // Best metric is hits/sec, keyed by duration bucket so we compare
+        // like with like (a 30s and 90s session aren't the same challenge).
+        const durKey = this.mode==='survival' ? 'surv' : (this.cfg.timed ? String(this.cfg.duration) : 'inf');
+        const bestKey = 'hps_' + durKey;
+        const priorBest = Store.getBest(MODULE, bestKey);   // null if none
+
+        // ── Comparison line ──
+        const cmpEl = document.getElementById('r-compare');
+        if(priorBest === null || priorBest === undefined || priorBest === 0){
+            cmpEl.className = 'res-compare record';
+            cmpEl.innerHTML = '<span class="ar">★</span> ' + I18N.t('m.res.baseline').replace('★ ','');
+        } else {
+            const diff = hps - priorBest;
+            if(diff > 0.001){
+                cmpEl.className = 'res-compare record';
+                cmpEl.innerHTML = `<span class="ar">▲</span> ${I18N.t('m.res.newbest')} · +${diff.toFixed(2)}${I18N.t('aim.unit')} ${I18N.t('m.res.over')}`;
+            } else if(Math.abs(diff) <= 0.001){
+                cmpEl.className = 'res-compare better';
+                cmpEl.innerHTML = `<span class="ar">=</span> ${I18N.t('m.res.matched')} (${priorBest.toFixed(2)}${I18N.t('aim.unit')})`;
+            } else {
+                cmpEl.className = 'res-compare worse';
+                cmpEl.innerHTML = `<span class="ar">▾</span> ${Math.abs(diff).toFixed(2)}${I18N.t('aim.unit')} ${I18N.t('m.res.below')} (${priorBest.toFixed(2)})`;
+            }
+        }
+
+        // Persist this session
+        Store.saveSession(MODULE, {
+            mode:this.mode, hps:parseFloat(hpsStr), acc, hits:this.hits,
+            maxStreak:this.maxStreak, durationSec:dur, durKey
+        });
+        Store.saveBest(MODULE, bestKey, hps, true);
+        // Keep a legacy score best too, for any other consumer
+        Store.saveBest(MODULE, 'score', this.score, true);
+
+        // ── Evolution chart: last sessions of the SAME duration bucket ──
+        this.renderEvolution(durKey, hps);
+
+        // ── Secondary details ──
+        document.getElementById('r-details').innerHTML =
+            `<span>${I18N.t('m.d.accuracy')} <b>${acc}%</b></span>` +
+            `<span>${I18N.t('m.d.beststreak')} <b>${this.maxStreak}</b></span>` +
+            `<span>${I18N.t('m.d.totalhits')} <b>${this.hits}</b></span>` +
+            (this.mode==='survival' ? '' : `<span>${dur.toFixed(1)}s ${I18N.t('m.d.session')}</span>`);
+
+        document.getElementById('res').classList.remove('hide');
+    },
+
+    // Renders the recent-sessions evolution bars for the matching duration
+    // bucket, so the comparison is apples-to-apples.
+    renderEvolution(durKey, currentHps){
+        const bars = document.getElementById('r-evo-bars');
+        const bestSpan = document.getElementById('r-evo-best');
+        const all = Store.getSessions(MODULE) || [];
+        // Filter to same bucket, take last 12 (oldest→newest), append current
+        const sameKind = all
+            .filter(s => s.durKey === durKey && typeof s.hps === 'number')
+            .slice(-12);
+        // The just-saved session is already in `all` (saveSession ran above),
+        // so we don't double-add. Just render what we have.
+        if(sameKind.length === 0){
+            bars.innerHTML = `<div class="res-evo-empty">${I18N.t('m.res.evoempty')}</div>`;
+            bestSpan.textContent = '';
+            return;
+        }
+        const max = Math.max(...sameKind.map(s => s.hps), currentHps, 0.01);
+        bestSpan.textContent = I18N.t('m.res.best') + ' ' + max.toFixed(2);
+        bars.innerHTML = '';
+        sameKind.forEach((s, i) => {
+            const bar = document.createElement('div');
+            bar.className = 'res-evo-bar' + (i === sameKind.length - 1 ? ' latest' : '');
+            bar.style.height = '0%';
+            bar.title = s.hps.toFixed(2) + '/seg';
+            bars.appendChild(bar);
+            const h = (s.hps / max) * 100;
+            this.scheduler.requestAnimationFrame(() => { bar.style.height = Math.max(5, h) + '%'; });
+        });
+    }
+};
+
+// ═══ INIT ═══
+window.addEventListener('mousemove',e=>{
+    document.getElementById('xhair').style.left=e.clientX+'px';
+    document.getElementById('xhair').style.top=e.clientY+'px';
+    Game.mouseX=e.clientX;Game.mouseY=e.clientY;
+});
+
+// Initialize UI state display
+UI.updateSpeed();
+UI.buildPatternChecks();
+UI.refreshSummary();
+if(!Snd.on) document.getElementById('snd-btn').textContent='♪ OFF';
+
+// Re-render JS-built text when the language changes. Static data-i18n nodes
+// update automatically; this covers the dynamic summary + challenge hint, and
+// the results panel if it's currently visible.
+window.addEventListener('langchange', () => {
+    UI.refreshSummary();
+    UI.refreshProfileCards();
+    UI.setChallenge(UI.challenge, document.querySelector('#t-challenge .pb.on'));
+});
+
+// Mount quick switcher (pause button + module overlay)
+BM.attachTraining({module:MODULE,game:Game,ui:UI,start:'launch',finish:'end'});
+UI.initProfiles();
+Game.qs = BM.mountQuickSwitcher({
+    current: MODULE,
+    onPause:  () => Game.pause(),
+    onResume: () => Game.resume(),
+    onExit:   () => Game.exit()
+});
+</script>
+</body>
+</html>

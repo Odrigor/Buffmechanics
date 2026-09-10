@@ -1,0 +1,470 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BuffMechanics | Click Timing</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' fill='%23f59e0b'/%3E%3Ctext x='50%25' y='54%25' text-anchor='middle' dominant-baseline='middle' font-family='monospace' font-size='40' font-weight='700' fill='%23ffffff'%3EB%3C/text%3E%3Crect x='2' y='2' width='60' height='60' fill='none' stroke='%23ffffff' stroke-width='3'/%3E%3C/svg%3E">
+    <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="../assets/shared.css">
+    <style>
+        :root{
+            --accent:#f59e0b;
+            --accent-dim:rgba(245,158,11,.12);
+            --peak:#00ff88;
+            --peak-dim:rgba(0,255,136,.15);
+        }
+        body{height:100vh;overflow:hidden;cursor:crosshair}
+
+        /* Arena grid */
+        #arena{position:fixed;inset:0;z-index:0;
+            background-image:linear-gradient(rgba(255,255,255,.015) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.015) 1px,transparent 1px);
+            background-size:60px 60px}
+
+        /* Launch line */
+        .launch-line{position:fixed;bottom:0;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,var(--accent),transparent);box-shadow:0 0 12px var(--accent);opacity:.4;z-index:2}
+
+        /* Targets */
+        .orb{position:absolute;border-radius:50%;transform:translate(-50%,-50%);will-change:transform;z-index:10;cursor:crosshair;transition:filter .1s}
+        .orb-ring{width:100%;height:100%;border-radius:50%;border:2px solid var(--accent);display:flex;align-items:center;justify-content:center;transition:all .12s}
+        .orb-core{width:35%;height:35%;border-radius:50%;background:var(--accent);box-shadow:0 0 8px var(--accent);transition:all .12s}
+
+        /* Peak state */
+        .orb.peak .orb-ring{border-color:var(--peak);background:var(--peak-dim);transform:scale(1.1);box-shadow:0 0 20px var(--peak-dim)}
+        .orb.peak .orb-core{background:var(--peak);box-shadow:0 0 14px var(--peak)}
+
+        /* Particles */
+        .ptcl{position:absolute;pointer-events:none;border-radius:50%;will-change:transform,opacity;z-index:15}
+
+        /* Score popup */
+        .score-pop{position:absolute;pointer-events:none;z-index:20;font-family:'Space Mono',monospace;font-size:14px;font-weight:700;animation:popUp .6s ease-out forwards}
+        @keyframes popUp{0%{opacity:1;transform:translate(-50%,-50%) scale(1)}100%{opacity:0;transform:translate(-50%,-120%) scale(.8)}}
+        .score-pop.perfect{font-size:18px;color:var(--peak)}
+
+        /* Combo display */
+        .combo{position:fixed;top:58px;left:50%;transform:translateX(-50%);z-index:100;pointer-events:none;opacity:0;transition:all .2s;font-size:28px;font-weight:700}
+        .combo.on{opacity:1}
+
+        /* Bottom info */
+        .bot-info{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);z-index:100;pointer-events:none;display:flex;gap:24px;opacity:0;transition:opacity .3s}
+        .bot-info.on{opacity:1}
+        .bi{text-align:center}
+        .bi-v{font-size:16px;font-weight:700;font-family:'Space Mono',monospace}
+        .bi-l{font-size:8px;color:var(--t3);font-family:'Space Mono',monospace;letter-spacing:.1em;text-transform:uppercase}
+
+        /* Mode cards (2-card layout) */
+        .mode-cards{display:flex;gap:12px;max-width:520px;width:100%;padding:0 20px;margin:20px 0}
+        .mcard{flex:1;background:var(--sf);border:1px solid var(--bd);padding:24px 16px;cursor:pointer;transition:all .2s;text-align:center}
+        .mcard:hover{border-color:var(--t2);transform:translateY(-3px)}
+        .mcard .micon{font-size:28px;margin-bottom:10px}
+        .mcard .mname{font-size:16px;font-weight:700;letter-spacing:.05em;margin-bottom:4px}
+        .mcard .mdesc{font-family:'Space Mono',monospace;font-size:9px;color:var(--t2);line-height:1.6}
+        .mcard.sel{border-color:var(--accent);background:var(--accent-dim)}
+
+        .setup .gobtn{max-width:320px;padding:14px 64px;width:auto}
+
+        /* ═══ Redesigned results ═══ */
+        .res-metric{text-align:center;margin-bottom:6px}
+        .res-metric-value{font-size:56px;font-weight:700;color:var(--accent);line-height:1;letter-spacing:-1px}
+        .res-metric-unit{font-size:22px;color:var(--t2);font-weight:700;margin-left:4px}
+        .res-metric-label{font-family:'Space Mono',monospace;font-size:9px;letter-spacing:.16em;color:var(--t3);text-transform:uppercase;margin-top:6px}
+        .res-compare{text-align:center;font-family:'Space Mono',monospace;font-size:12px;letter-spacing:.04em;margin:14px 0;min-height:20px}
+        .res-compare.better{color:var(--peak)}
+        .res-compare.worse{color:var(--t2)}
+        .res-compare.record{color:var(--gold,#eab308)}
+        .res-compare .ar{font-weight:700;margin-right:4px}
+        .res-evo{margin:16px 0;padding:0 4px}
+        .res-evo-title{font-family:'Space Mono',monospace;font-size:8px;letter-spacing:.16em;color:var(--t3);text-transform:uppercase;margin-bottom:8px;display:flex;justify-content:space-between}
+        .res-evo-bars{display:flex;align-items:flex-end;gap:3px;height:54px}
+        .res-evo-bar{flex:1;background:var(--accent);opacity:.35;min-height:3px;border-radius:1px;transition:height .4s cubic-bezier(.4,0,.2,1),opacity .2s}
+        .res-evo-bar.latest{opacity:.95}
+        .res-evo-bar:hover{opacity:1}
+        .res-evo-empty{font-family:'Space Mono',monospace;font-size:9px;color:var(--t3);text-align:center;padding:18px 0;letter-spacing:.1em}
+        .res-details{display:flex;justify-content:center;gap:18px;flex-wrap:wrap;font-family:'Space Mono',monospace;font-size:10px;color:var(--t2);margin:14px 0;letter-spacing:.04em}
+        .res-details b{color:var(--t1);font-weight:700}
+    </style>
+<link rel="stylesheet" href="../assets/experience.css">
+<link rel="stylesheet" href="../assets/workspace.css">
+</head>
+<body>
+<div id="arena"></div>
+<div class="launch-line"></div>
+
+<!-- HUD -->
+<div class="hud" id="hud">
+    <div class="hb"><span class="hl" data-i18n="clk.score">Score</span><span class="hv" style="color:var(--accent)" id="h-sc">0</span></div>
+    <div class="hb c">
+        <div class="tpill"><div class="tdot"></div><span class="hv" id="h-tm" style="font-size:20px">60</span></div>
+    </div>
+    <div class="hb r"><span class="hl" data-i18n="clk.accuracy">Accuracy</span><span class="hv" id="h-ac">100%</span></div>
+</div>
+<div class="combo" id="combo">×1</div>
+<div class="bot-info" id="binfo">
+    <div class="bi"><div class="bi-v" id="bi-hits" style="color:var(--accent)">0</div><div class="bi-l" data-i18n="clk.hits">Hits</div></div>
+    <div class="bi"><div class="bi-v" id="bi-perf" style="color:var(--peak)">0</div><div class="bi-l" data-i18n="clk.perfects">Perfects</div></div>
+    <div class="bi"><div class="bi-v" id="bi-miss" style="color:var(--miss)">0</div><div class="bi-l" data-i18n="clk.missed">Missed</div></div>
+</div>
+
+<!-- SETUP -->
+<div class="setup" id="setup">
+    <button class="snd-toggle" id="snd-btn" onclick="Snd.toggle()">♪ ON</button>
+    <div class="setup-logo">CLK</div>
+    <div class="stitle">CLICK <em>TIMING</em></div>
+    <div class="ssub" data-i18n="clk.sub">Shoot targets at peak trajectory</div>
+
+    <div class="mode-cards">
+        <div class="mcard sel" id="mc-normal" onclick="UI.pick('normal')">
+            <div class="micon">🌙</div>
+            <div class="mname">LUNAR</div>
+            <div class="mdesc" data-i18n="clk.lunar.desc">Low gravity. Targets float longer at peak. Good start.</div>
+        </div>
+        <div class="mcard" id="mc-pro" onclick="UI.pick('pro')">
+            <div class="micon">⚡</div>
+            <div class="mname">JUPITER</div>
+            <div class="mdesc" data-i18n="clk.jupiter.desc">Heavy gravity. Fast arcs. Perfect timing required.</div>
+        </div>
+    </div>
+
+    <button class="gobtn" onclick="Game.start()" data-i18n="m.start.plain">START</button>
+    <button class="gobtn-back" onmouseenter="Snd.tick(660)" onclick="BM.backToHome()" data-i18n="m.back">← BACK TO MENU</button>
+    <div class="hint" data-i18n="clk.hint">Click targets when they glow green at peak height. 60 seconds.</div>
+</div>
+
+<!-- RESULTS -->
+<div class="res hide" id="res">
+    <div class="rcard">
+        <div class="hl" style="text-align:center;margin-bottom:10px" id="r-mode-label">SESSION COMPLETE</div>
+
+        <!-- Primary metric: perfect-timing rate -->
+        <div class="res-metric">
+            <span class="res-metric-value" id="r-primary">0</span><span class="res-metric-unit">%</span>
+            <div class="res-metric-label" data-i18n="clk.metric">Perfect timing rate</div>
+        </div>
+
+        <!-- Comparison to personal best -->
+        <div class="res-compare" id="r-compare"></div>
+
+        <!-- Evolution chart -->
+        <div class="res-evo">
+            <div class="res-evo-title"><span data-i18n="m.recent">Recent sessions</span><span id="r-evo-best"></span></div>
+            <div class="res-evo-bars" id="r-evo-bars"></div>
+        </div>
+
+        <!-- Secondary details -->
+        <div class="res-details" id="r-details"></div>
+
+        <div class="rbtns">
+            <button class="rb-s" onclick="location.href='../index.html'" data-i18n="m.exit">EXIT</button>
+            <button class="rb-s" onclick="Game.toSetup()" data-i18n="m.menu">MENU</button>
+            <button class="rb-p" onclick="Game.restart()" data-i18n="m.retry">RETRY</button>
+        </div>
+    </div>
+</div>
+
+<script src="../assets/i18n.js"></script>
+<script src="../assets/shared.js"></script>
+<script src="../assets/history.js"></script>
+<script src="../assets/training-core.js"></script>
+<script src="../assets/routine.js"></script>
+<script src="../assets/experience.js"></script>
+<script>
+const MODULE='clicktime';
+
+const UI={
+    mode:'normal',
+    pick(m){this.mode=m;
+        document.getElementById('mc-normal').classList.toggle('sel',m==='normal');
+        document.getElementById('mc-pro').classList.toggle('sel',m==='pro')}
+};
+
+const DIFF={
+    normal:{gravity:.06,minF:5,maxF:9,spreadX:3,spawnMs:1100,peakThreshold:1.2},
+    pro:{gravity:.22,minF:12,maxF:17,spreadX:4,spawnMs:700,peakThreshold:1.8}
+};
+
+// Particles
+function burst(x,y,color,count=10){
+    const arena=document.getElementById('arena');
+    for(let i=0;i<count;i++){
+        const p=document.createElement('div');p.className='ptcl';
+        const sz=3+Math.random()*5;
+        p.style.width=sz+'px';p.style.height=sz+'px';p.style.background=color;
+        p.style.left=x+'px';p.style.top=y+'px';
+        arena.appendChild(p);
+        const a=Math.random()*Math.PI*2,v=1+Math.random()*2;
+        const vx=Math.cos(a)*v,vy=Math.sin(a)*v;
+        const anim=p.animate([
+            {transform:'translate(0,0) scale(1)',opacity:1},
+            {transform:`translate(${vx*25}px,${vy*25+30}px) scale(0)`,opacity:0}
+        ],{duration:350+Math.random()*150,easing:'cubic-bezier(0,.9,.57,1)'});
+        anim.onfinish=()=>p.remove();
+    }
+}
+
+// Orb class
+class Orb{
+    constructor(cfg){
+        Game.spawned++;
+        this.el=document.createElement('div');this.el.className='orb';
+        const arena=document.getElementById('arena');arena.appendChild(this.el);
+
+        const scale=.8+Math.random()*.4;
+        this.size=46*scale;
+        this.el.style.width=this.size+'px';this.el.style.height=this.size+'px';
+        this.el.innerHTML='<div class="orb-ring"><div class="orb-core"></div></div>';
+
+        const margin=window.innerWidth*.15;
+        this.x=margin+Math.random()*(window.innerWidth-margin*2);
+        this.y=window.innerHeight+50;
+
+        const centerBias=(window.innerWidth/2-this.x)/(window.innerWidth/2);
+        this.vx=(Math.random()-.5)*cfg.spreadX + centerBias*1.5;
+        this.vy=-(cfg.minF+Math.random()*(cfg.maxF-cfg.minF));
+        this.gravity=cfg.gravity;
+        this.peakThreshold=cfg.peakThreshold;
+
+        this.dead=false;this.peaked=false;this.perfects=0;
+
+        this.el.onmousedown=(e)=>{e.stopPropagation();Game.hitOrb(this,e.clientX,e.clientY)};
+    }
+
+    update(dt){
+        if(this.dead)return;
+        const f=dt*60;this.x+=this.vx*f;this.y+=this.vy*f+.5*this.gravity*f*f;
+        this.vy+=this.gravity*f;
+
+        const pad=40;
+        if(this.x<pad){this.x=pad;this.vx=Math.abs(this.vx)*.7}
+        if(this.x>window.innerWidth-pad){this.x=window.innerWidth-pad;this.vx=-Math.abs(this.vx)*.7}
+
+        const atPeak=Math.abs(this.vy)<this.peakThreshold;
+        if(atPeak&&!this.peaked){this.el.classList.add('peak');this.peaked=true}
+        else if(!atPeak&&this.peaked&&this.vy>0){this.el.classList.remove('peak');this.peaked=false}
+
+        this.el.style.transform=`translate(${this.x-this.size/2}px,${this.y-this.size/2}px)`;
+
+        if(this.y>window.innerHeight+80){this.die(false)}
+    }
+
+    die(hit){this.dead=true;this.el.remove();if(!hit)Game.orbMissed()}
+}
+
+// Game
+const Game={
+    running:false,paused:false,cfg:null,orbs:[],
+    score:0,clicks:0,hits:0,perfects:0,misses:0,combo:0,maxCombo:0,timeLeft:60,
+    spawnI:null,timerI:null,qs:null,
+
+    start(){
+        Snd.init();
+        this.cfg=DIFF[UI.mode];
+        this.score=0;this.clicks=0;this.hits=0;this.perfects=0;this.misses=0;
+        this.combo=0;this.maxCombo=0;this.timeLeft=60;this.orbs=[];this.spawned=0;
+        this.running=true;this.paused=false;
+
+        document.getElementById('setup').classList.add('hide');
+        document.getElementById('res').classList.add('hide');
+        document.getElementById('hud').classList.add('on');
+        document.getElementById('binfo').classList.add('on');
+        document.getElementById('arena').innerHTML='';
+        this.updateHUD();
+
+        this.loop();
+        this.spawnI=this.scheduler.setInterval(()=>this.orbs.push(new Orb(this.cfg)),this.cfg.spawnMs);
+        this.timerI=this.scheduler.setInterval(()=>{this.timeLeft=Math.max(0,Math.ceil(this.sessionDuration-this.clock.now()/1000-(this.timePenalty||0)));document.getElementById('h-tm').textContent=this.timeLeft;if(this.timeLeft<=0)this.end()},1000);
+
+        if(this.qs && this.qs.btn) this.qs.btn.classList.add('on');
+
+        document.getElementById('arena').onmousedown=(e)=>{
+            if(!this.running || this.paused)return;
+            if(!e.target.closest('.orb')){this.clicks++;this.combo=0;Snd.miss();this.updateHUD()}
+        };
+    },
+
+    restart(){this.start()},
+
+    // ── Pause / Resume — orbs freeze mid-flight (loop stopped); time freezes too.
+    // No state needs to be captured: orb positions/velocities live on each Orb
+    // instance, and resuming just restarts the loop + intervals.
+    pause(){
+        if(!this.running || this.paused)return;
+        this.paused=true;
+        this.scheduler.clear(this.spawnI);
+        this.scheduler.clear(this.timerI);
+    },
+    resume(){
+        if(!this.running || !this.paused)return;
+        this.paused=false;
+        this.loop();
+        this.spawnI=this.scheduler.setInterval(()=>this.orbs.push(new Orb(this.cfg)),this.cfg.spawnMs);
+        this.timerI=this.scheduler.setInterval(()=>{this.timeLeft=Math.max(0,Math.ceil(this.sessionDuration-this.clock.now()/1000-(this.timePenalty||0)));document.getElementById('h-tm').textContent=this.timeLeft;if(this.timeLeft<=0)this.end()},1000);
+    },
+    exit(){
+        this.running=false;this.paused=false;
+        this.scheduler.clear(this.spawnI);this.scheduler.clear(this.timerI);
+    },
+
+    loop(){
+        if(!this.running || this.paused)return;
+        this.orbs=this.orbs.filter(o=>!o.dead);
+        const dt=this.clock.step("motion");
+        this.orbs.forEach(o=>o.update(dt));
+        this.scheduler.requestAnimationFrame(()=>this.loop());
+    },
+
+    hitOrb(orb,x,y){
+        if(!this.running || this.paused || orb.dead)return;
+        const isPeak=orb.el.classList.contains('peak');
+        const pts=isPeak?300:100;
+        const mult=1+this.combo*.1;
+
+        orb.die(true);
+        this.clicks++;this.hits++;this.combo++;
+        if(isPeak)this.perfects++;
+        if(this.combo>this.maxCombo)this.maxCombo=this.combo;
+        this.score+=Math.floor(pts*mult);
+
+        if(isPeak) Snd.perfect(); else Snd.hit();
+        burst(x,y,isPeak?'var(--peak)':'#fff',isPeak?16:10);
+
+        const pop=document.createElement('div');
+        pop.className='score-pop'+(isPeak?' perfect':'');
+        pop.textContent=isPeak?'PERFECT +'+Math.floor(pts*mult):'+'+Math.floor(pts*mult);
+        pop.style.left=x+'px';pop.style.top=(y-10)+'px';
+        if(!isPeak)pop.style.color='#fff';
+        document.getElementById('arena').appendChild(pop);
+        this.scheduler.setTimeout(()=>pop.remove(),600);
+
+        this.updateHUD();
+    },
+
+    orbMissed(){this.misses++;this.combo=0;this.updateHUD()},
+
+    updateHUD(){
+        document.getElementById('h-sc').textContent=this.score;
+        const acc=this.clicks===0?0:Math.round(this.hits/this.clicks*100);
+        document.getElementById('h-ac').textContent=acc+'%';
+        document.getElementById('bi-hits').textContent=this.hits;
+        document.getElementById('bi-perf').textContent=this.perfects;
+        document.getElementById('bi-miss').textContent=this.misses;
+
+        const cel=document.getElementById('combo');
+        if(this.combo>1){cel.textContent='×'+this.combo;cel.classList.add('on');
+            cel.style.color=this.combo>=10?'var(--peak)':this.combo>=5?'var(--accent)':'var(--t1)';
+            cel.style.transform='translateX(-50%) scale(1.2)';
+            this.scheduler.setTimeout(()=>cel.style.transform='translateX(-50%) scale(1)',100);
+        }else{cel.classList.remove('on')}
+    },
+
+    end(){
+        this.running=false;this.paused=false;
+        this.scheduler.clear(this.spawnI);this.scheduler.clear(this.timerI);
+        document.getElementById('hud').classList.remove('on');
+        document.getElementById('binfo').classList.remove('on');
+        document.getElementById('combo').classList.remove('on');
+        document.getElementById('arena').innerHTML='';
+        if(this.qs && this.qs.btn) this.qs.btn.classList.remove('on');
+
+        const acc=this.clicks===0?0:Math.round(this.hits/this.clicks*100);
+        // Primary metric: perfect-timing rate = perfects / hits (%)
+        const perfRate = this.hits>0 ? Math.round(this.perfects/this.hits*100) : 0;
+
+        const modeLabel = UI.mode==='pro' ? 'JUPITER' : 'LUNAR';
+        document.getElementById('r-mode-label').textContent = modeLabel + ' — ' + I18N.t('m.complete');
+        document.getElementById('r-primary').textContent = perfRate;
+
+        // ── Persist BEFORE comparison; record per-mode (Lunar/Jupiter differ) ──
+        const bestKey = 'perfrate_' + UI.mode;
+        const priorBest = Store.getBest(MODULE, bestKey);
+
+        Store.saveSession(MODULE,{
+            mode:UI.mode, perfRate, hits:this.hits, perfects:this.perfects,
+            spawned:this.spawned, coverage:this.spawned?Math.round(this.hits/this.spawned*100):0,
+            acc, maxCombo:this.maxCombo, score:this.score
+        });
+        Store.saveBest(MODULE, bestKey, perfRate, true);
+        Store.saveBest(MODULE, 'score', this.score, true);  // legacy
+
+        // ── Comparison line ──
+        const cmpEl=document.getElementById('r-compare');
+        if(this.hits===0){
+            cmpEl.className='res-compare worse';
+            cmpEl.innerHTML='<span class="ar">—</span> ' + I18N.t('clk.nohits');
+        } else if(priorBest===null||priorBest===undefined){
+            cmpEl.className='res-compare record';
+            cmpEl.innerHTML='<span class="ar">★</span> ' + (I18N.lang==='es' ? 'Primera sesión '+modeLabel+' — tu base' : 'First '+modeLabel+' session — your baseline');
+        } else {
+            const diff = perfRate - priorBest;
+            if(diff>0){
+                cmpEl.className='res-compare record';
+                cmpEl.innerHTML=`<span class="ar">▲</span> ${I18N.t('m.res.newbest')} · +${diff}% ${I18N.t('clk.over')}`;
+            } else if(diff===0){
+                cmpEl.className='res-compare better';
+                cmpEl.innerHTML=`<span class="ar">=</span> ${I18N.t('m.res.matched')} (${priorBest}%)`;
+            } else {
+                cmpEl.className='res-compare worse';
+                cmpEl.innerHTML=`<span class="ar">▾</span> ${Math.abs(diff)}% ${I18N.t('clk.below')} (${priorBest}%)`;
+            }
+        }
+
+        // ── Evolution chart (same mode bucket) ──
+        this.renderEvolution(UI.mode, perfRate);
+
+        // ── Secondary details ──
+        document.getElementById('r-details').innerHTML =
+            `<span>${I18N.t('clk.d.perfects')} <b>${this.perfects}</b>/${this.hits}</span>` +
+            `<span>${I18N.t('clk.d.accuracy')} <b>${acc}%</b></span>` +
+            `<span>${I18N.t('clk.d.bestcombo')} <b>${this.maxCombo}</b></span>`;
+
+        document.getElementById('res').classList.remove('hide');
+    },
+
+    toSetup(){
+        document.getElementById('res').classList.add('hide');
+        document.getElementById('setup').classList.remove('hide');
+        if(this.qs && this.qs.btn) this.qs.btn.classList.remove('on');
+    },
+
+    renderEvolution(mode, currentRate){
+        const bars=document.getElementById('r-evo-bars');
+        const bestSpan=document.getElementById('r-evo-best');
+        const all=Store.getSessions(MODULE)||[];
+        const sameKind=all.filter(s=>s.mode===mode && typeof s.perfRate==='number').slice(-12);
+        if(sameKind.length===0){
+            bars.innerHTML=`<div class="res-evo-empty">${I18N.t('clk.evoempty')}</div>`;
+            bestSpan.textContent='';
+            return;
+        }
+        const max=Math.max(...sameKind.map(s=>s.perfRate),currentRate,1);
+        bestSpan.textContent=I18N.t('m.res.best')+' '+max+'%';
+        bars.innerHTML='';
+        sameKind.forEach((s,i)=>{
+            const bar=document.createElement('div');
+            bar.className='res-evo-bar'+(i===sameKind.length-1?' latest':'');
+            bar.style.height='0%';
+            bar.title=s.perfRate+'%';
+            bars.appendChild(bar);
+            const h=(s.perfRate/max)*100;
+            this.scheduler.requestAnimationFrame(()=>{ bar.style.height=Math.max(5,h)+'%'; });
+        });
+    }
+};
+
+if(!Snd.on) document.getElementById('snd-btn').textContent='♪ OFF';
+
+// Mode-card hover ticks — use the module's own tone (466 Hz) for coherence
+// with the home cards and quick-switcher tiles
+document.getElementById('mc-normal').addEventListener('mouseenter', () => Snd.tick(466));
+document.getElementById('mc-pro').addEventListener('mouseenter', () => Snd.tick(466));
+
+// Quick switcher — pause + module nav
+BM.attachTraining({module:MODULE,game:Game,ui:UI,start:'start',finish:'end'});
+Game.qs = BM.mountQuickSwitcher({
+    current: MODULE,
+    onPause:  () => Game.pause(),
+    onResume: () => Game.resume(),
+    onExit:   () => Game.exit()
+});
+</script>
+</body>
+</html>
